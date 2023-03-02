@@ -11,12 +11,10 @@ void print_code1(int N) {
 			"#include <complex>\n"
 			"#include <unordered_map>\n"
 			"\n");
-	printf("std::vector<double> test(std::vector<double>& xin) {\n");
-	printf("\tstd::vector<double> xout(xin.size());\n");
+	printf("void test(double* x) {\n");
 }
 
 void print_code2(int N) {
-	printf("\treturn xout;\n");
 	printf("}\n");
 	printf("\n"
 			"\n"
@@ -89,7 +87,8 @@ void print_code2(int N) {
 			"\t\t\t}\n"
 			"\t\t}\n"
 			"\t\ttm1.start();\n"
-			"\t\tauto xout = test(xin);\n"
+			"\t\ttest(xin.data());\n"
+			"\t\tauto xout = xin;\n"
 			"\t\ttm1.stop();\n"
 			"\t\ttm2.start();\n"
 			"\t\tfftw(y);\n"
@@ -109,6 +108,7 @@ void print_code2(int N) {
 			"\t\n"
 			"}\n"
 			"", N);
+
 }
 
 int main(int argc, char **argv) {
