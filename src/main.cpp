@@ -112,10 +112,12 @@ void print_code2(int N) {
 }
 
 int main(int argc, char **argv) {
-	constexpr int N = 8;
+	constexpr int N = 2;
 	dag_node::set_ouputs(fft_prime_power(2, dag_node::create_inputs(2 * N), N));
 	print_code1(N);
 	dag_node::print_list();
 	print_code2(N);
+	auto opcnt = dag_node::get_operation_count();
+	fprintf(stderr, "tot = %i | add = %i | mul = %i | neg = %i\n", opcnt.tot, opcnt.add, opcnt.mul, opcnt.neg);
 	return 0;
 }

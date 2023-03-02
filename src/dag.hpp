@@ -62,6 +62,13 @@ inline bool is_binary(vertex_type t) {
 	}
 }
 
+struct opcnt_t {
+	int add;
+	int mul;
+	int neg;
+	int tot;
+};
+
 class dag {
 	struct map_entry {
 		std::set<int> in;
@@ -147,15 +154,6 @@ public:
 		return -1;
 	}
 	std::vector<int> sort() {
-		std::vector<int> rc;
-		std::unordered_set<int> touched;
-		for (auto v : outputs) {
-			auto results = search(v, touched);
-			rc.insert(rc.end(), results.begin(), results.end());
-		}
-		return rc;
-	}
-	std::vector<int> sort3() {
 		auto g = *this;
 		std::vector<int> L;
 		auto S = std::unordered_set<int>(g.inputs.begin(), g.inputs.end());
@@ -201,40 +199,6 @@ public:
 			S.erase(n);
 			L.push_back(n);
 		}
-		return L;
-	}
-	std::vector<int> sort2() {
-		auto oldgraph = *this;
-		std::vector<int> L;
-		auto S = std::deque<int>(inputs.begin(), inputs.end());
-		int sw = 1;
-		while (S.size()) {
-			auto n = S.back();
-			S.pop_back();
-			L.push_back(n);
-			auto eout = get_edges_out(n);
-			for (auto m : eout) {
-				remove_edge(n, m);
-				auto edges_in = get_edges_in(m);
-				bool flag = false;
-				for (auto in : edges_in) {
-					if (type[in] != CON) {
-						flag = true;
-						break;
-					}
-				}
-				if (!flag) {
-					if (sw) {
-						S.push_back(m);
-						sw = 0;
-					} else {
-						S.push_front(m);
-						sw = 1;
-					}
-				}
-			}
-		}
-		*this = oldgraph;
 		return L;
 	}
 	int vertex_exists(vertex_type type, std::set<int> edges_in) {
@@ -346,7 +310,7 @@ public:
 			graph->add_edge(a.id, c.id);
 			graph->add_edge(b.id, c.id);
 		}
-		return c;
+		return propagate_signs(c);
 	}
 	friend dag_node unary_op(vertex_type type, dag_node a) {
 		dag_node c;
@@ -359,7 +323,7 @@ public:
 			c.id = graph->add_vertex(type);
 			graph->add_edge(a.id, c.id);
 		}
-		return c;
+		return propagate_signs(c);
 	}
 	dag_node() {
 	}
@@ -367,25 +331,29 @@ public:
 		*this = a;
 	}
 	dag_node operator=(double a) {
-		bool flag = false;
-		auto iter = const_map.upper_bound(a);
-		if (iter != const_map.end()) {
-			if (close2(iter->first, a)) {
-				id = iter->second;
-				flag = true;
-			} else if (const_map.size() > 1) {
-				iter--;
+		if (a >= 0.0) {
+			bool flag = false;
+			auto iter = const_map.upper_bound(a);
+			if (iter != const_map.end()) {
 				if (close2(iter->first, a)) {
 					id = iter->second;
 					flag = true;
+				} else if (const_map.size() > 1) {
+					iter--;
+					if (close2(iter->first, a)) {
+						id = iter->second;
+						flag = true;
+					}
 				}
 			}
-		}
-		if (!flag) {
-			id = graph->add_vertex(CON);
-			graph->set_value(id, a);
-			graph->set_name(id, std::to_string(a));
-			const_map[a] = id;
+			if (!flag) {
+				id = graph->add_vertex(CON);
+				graph->set_value(id, a);
+				graph->set_name(id, std::to_string(a));
+				const_map[a] = id;
+			}
+		} else {
+			*this = -dag_node(-a);
 		}
 		return *this;
 	}
@@ -407,33 +375,112 @@ public:
 		}
 		return false;
 	}
-	friend dag_node operator-(dag_node a) {
-		if (a.zero()) {
-			return a;
+	static dag_node propagate_signs(dag_node n) {
+		auto edges_in = graph->get_edges_in(n.id);
+		dag_node next;
+		for (auto m : edges_in) {
+			next.id = m;
+			propagate_signs(next);
 		}
-		return unary_op(NEG, a);
+		auto type = graph->get_type(n.id);
+		next.id = n.id;
+		if (is_arithmetic(type)) {
+			dag_node a, b;
+			a.id = edges_in.front();
+			b.id = edges_in.back();
+			dag_node achild, bchild;
+			bool aneg = graph->get_type(a.id) == NEG;
+			bool bneg = graph->get_type(b.id) == NEG;
+			if (aneg) {
+				achild.id = graph->get_edges_in(a.id).front();
+			}
+			if (bneg) {
+				bchild.id = graph->get_edges_in(b.id).front();
+			}
+			switch (type) {
+			case ADD:
+				if (aneg && bneg) {
+					next = -(achild + bchild);
+				} else if (aneg) {
+					next = b - achild;
+				} else if (bneg) {
+					next = a - bchild;
+				}
+				break;
+			case SUB:
+				if (aneg && bneg) {
+					next = bchild - achild;
+				} else if (aneg) {
+					next = -(achild + b);
+				} else if (bneg) {
+					next = a + bchild;
+				}
+				break;
+			case NSUB:
+				if (aneg && bneg) {
+					next = achild - bchild;
+				} else if (aneg) {
+					next = achild + b;
+				} else if (bneg) {
+					next = -(a + bchild);
+				}
+				break;
+			case MUL:
+				if (aneg && bneg) {
+					next = achild * bchild;
+				} else if (aneg) {
+					next = -(achild * b);
+				} else if (bneg) {
+					next = -(bchild * a);
+				}
+				break;
+			case NEG:
+				if (aneg) {
+					next = achild;
+				}
+				break;
+			}
+		}
+		return next;
+	}
+	friend dag_node operator-(dag_node a) {
+		bool aneg = graph->get_type(a.id) == NEG;
+		if (aneg) {
+			a.id = graph->get_edges_in(a.id).front();
+			return a;
+		} else if (a.zero()) {
+			return a;
+		} else {
+			return unary_op(NEG, a);
+		}
 	}
 	friend dag_node operator+(dag_node a, dag_node b) {
+		bool aneg = graph->get_type(a.id) == NEG;
+		bool bneg = graph->get_type(b.id) == NEG;
 		if (a.zero()) {
 			return b;
 		} else if (b.zero()) {
 			return a;
+		} else {
+			return binary_op(ADD, a, b);
 		}
-		return binary_op(ADD, a, b);
 	}
 	friend dag_node operator-(dag_node a, dag_node b) {
+		bool aneg = graph->get_type(a.id) == NEG;
+		bool bneg = graph->get_type(b.id) == NEG;
 		if (a.zero()) {
 			return -b;
 		} else if (b.zero()) {
 			return a;
-		}
-		if (a.id < b.id) {
+		} else if (a.id < b.id) {
 			return binary_op(SUB, a, b);
 		} else {
 			return binary_op(NSUB, a, b);
 		}
 	}
 	friend dag_node operator*(dag_node a, dag_node b) {
+		bool aneg = graph->get_type(a.id) == NEG;
+		bool bneg = graph->get_type(b.id) == NEG;
 		if (a.zero() || b.zero()) {
 			return a;
 		} else if (a.one()) {
@@ -474,9 +521,9 @@ public:
 			graph->set_name(outs[i].id, std::string("x[") + std::to_string(i) + "]");
 		}
 	}
-	static std::vector<dag_node> list(dag& g) {
+	static std::vector<dag_node> list() {
 		std::vector<dag_node> nodes;
-		auto indices = g.sort3();
+		auto indices = graph->sort();
 		for (auto i : indices) {
 			dag_node node;
 			node.id = i;
@@ -485,7 +532,7 @@ public:
 		return nodes;
 	}
 	static void print_list() {
-		auto nodes = list(*graph);
+		auto nodes = list();
 		int regcnt = 0;
 		std::unordered_set<int> completed;
 		std::set<std::string> free_vars;
@@ -595,6 +642,32 @@ public:
 				}
 			}
 		}
+	}
+	static opcnt_t get_operation_count() {
+		opcnt_t cnt;
+		cnt.add = cnt.mul = cnt.neg = cnt.tot = 0;
+		auto L = list();
+		for (auto n : L) {
+			switch (graph->get_type(n.id)) {
+			case ADD:
+			case SUB:
+			case NSUB:
+				cnt.add++;
+				cnt.tot++;
+				break;
+			case MUL:
+				cnt.mul++;
+				cnt.tot++;
+				break;
+			case NEG:
+				cnt.neg++;
+				cnt.tot++;
+				break;
+			default:
+				break;
+			}
+		}
+		return cnt;
 	}
 	static std::vector<dag_node> create_inputs(int sz) {
 		std::vector<dag_node> in;
