@@ -125,5 +125,4 @@ int test() {
 }
 int main(int argc, char **argv) {
 	test();
-	printf( "Test done\n");
 }

@@ -38,7 +38,6 @@ std::vector<dag_node> fft_prime_power(int R, std::vector<dag_node> xin, int N) {
 	for (int n1 = 0; n1 < N1; n1++) {
 		sub[n1] = fft_prime_power(N1, sub[n1], N2);
 	}
-	assert(dag_node::sanity_check());
 	for (int k2 = 0; k2 < N2; k2++) {
 		for (int k1 = 0; k1 < N1; k1++) {
 			cmplx x;
