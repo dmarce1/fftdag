@@ -39,6 +39,17 @@ inline bool is_arithmetic(vertex_type t) {
 	}
 }
 
+inline bool is_additive(vertex_type t) {
+	switch (t) {
+	case ADD:
+	case SUB:
+	case NSUB:
+		return true;
+	default:
+		return false;
+	}
+}
+
 class dag;
 
 struct opcnt_t {
@@ -54,6 +65,7 @@ class dag {
 		std::set<int> out;
 		std::set<int> in;
 		std::string name;
+		double value;
 		int cnt;
 		dag_entry() {
 			cnt = 0;
@@ -108,9 +120,6 @@ public:
 		dag* graph_ptr;
 		int id;
 		friend class dag;
-		operator int() const {
-			return id;
-		}
 		void destroy() {
 			if (graph_ptr) {
 				assert(graph_ptr->map.find(id) != graph_ptr->map.end());
@@ -119,6 +128,9 @@ public:
 			}
 		}
 	public:
+		operator int() const {
+			return id;
+		}
 		vertex() {
 			id = -1;
 			graph_ptr = nullptr;
@@ -184,6 +196,9 @@ public:
 	void set_output(vertex v) {
 		assert(map.find(v) != map.end());
 		outputs.insert(v);
+	}
+	void clear_outputs() {
+		outputs.clear();
 	}
 	void add_edge(vertex from, vertex to) {
 		assert(map[from].out.find(to) == map[from].out.end());
@@ -263,20 +278,32 @@ public:
 		auto entry = map[v];
 		return entry.type;
 	}
+	void set_value(vertex v, double val) {
+		map[v].value = val;
+	}
+	double get_value(vertex v) {
+		auto entry = map[v];
+		return entry.value;
+	}
 };
 
 class dag_node {
 	using vertex = dag::vertex;
 	vertex id;
-	double value;
 	static std::shared_ptr<dag> graph;
 	static std::map<double, vertex> const_map;
-
+	static std::unordered_map<vertex_type, std::map<vertex, std::map<vertex, vertex>>>common_binary;
+	static std::unordered_map<vertex_type, std::map<vertex, vertex>> common_unary;
 public:
-
+	bool operator<(const dag_node& other) {
+		return id < other.id;
+	}
+	bool operator==(const dag_node& other) {
+		return id == other.id;
+	}
 	bool zero() {
 		if (graph->get_type(id) == CON) {
-			return close2(value, 0.0);
+			return close2(graph->get_value(id), 0.0);
 		} else {
 			return false;
 		}
@@ -284,7 +311,7 @@ public:
 
 	bool one() {
 		if (graph->get_type(id) == CON) {
-			return close2(value, 1.0);
+			return close2(graph->get_value(id), 1.0);
 		} else {
 			return false;
 		}
@@ -292,7 +319,7 @@ public:
 
 	bool none() {
 		if (graph->get_type(id) == CON) {
-			return close2(value, -1.0);
+			return close2(graph->get_value(id), -1.0);
 		} else {
 			return false;
 		}
@@ -300,55 +327,245 @@ public:
 
 	dag_node operator=(dag_node other) {
 		id = other.id;
-		value = other.value;
 		return *this;
+	}
+
+	bool neg() const {
+		return graph->get_type(id) == NEG;
+	}
+	dag_node neg_in() {
+		dag_node in;
+		in.id = graph->get_edges_in(id)[0];
+		return in;
+	}
+
+	static void optimize() {
+		auto outputs = graph->get_outputs();
+		graph->clear_outputs();
+		for (auto o : outputs) {
+			dag_node c;
+			c.id = o;
+			auto nm = graph->get_name(o);
+			c = optimize(c);
+			graph->set_name(c.id, nm);
+			graph->set_output(c.id);
+		}
+	}
+
+	static dag_node optimize(dag_node node) {
+		return optimize2(optimize1(node));
+	}
+
+	static dag_node optimize2(dag_node node) {
+		auto edges = graph->get_edges_in(node.id);
+		for( auto e : edges) {
+			dag_node other;
+			other.id = e;
+			other = optimize(other);
+		}
+		dag_node A;
+		dag_node B;
+		auto type = graph->get_type(node.id);
+		if(is_arithmetic(type)) {
+			A.id = edges.front();
+			B.id = edges.back();
+			switch(type) {
+				case ADD:
+				if (A.zero() && B.zero()) {
+					node = dag_node(0.0);
+				} else if( A.zero()) {
+					node = B;
+				} else if( B.zero()) {
+					node = A;
+				} else if( A.neg() && B.neg()) {
+					node = -(A.neg_in() + B.neg_in());
+				} else if( A.neg()) {
+					node = B - A.neg_in();
+				} else if( B.neg()) {
+					node = A - B.neg_in();
+				}
+				break;
+				case SUB:
+				if (A.zero() && B.zero()) {
+					node = dag_node(0.0);
+				} else if( A.zero()) {
+					node = -B;
+				} else if( B.zero()) {
+					node = A;
+				} else if( A.neg() && B.neg()) {
+					node = B.neg_in() - A.neg_in();
+				} else if( A.neg()) {
+					node = -(B + A.neg_in());
+				} else if( B.neg()) {
+					node = A + B.neg_in();
+				}
+				break;
+				case NSUB:
+				if (A.zero() && B.zero()) {
+					node = dag_node(0.0);
+				} else if( A.zero()) {
+					node = B;
+				} else if( B.zero()) {
+					node = -A;
+				} else if( A.neg() && B.neg()) {
+					node = A.neg_in() - B.neg_in();
+				} else if( B.neg()) {
+					node = -(A + B.neg_in());
+				} else if( A.neg()) {
+					node = B + A.neg_in();
+				}
+				break;
+				case MUL:
+				if (A.zero() || B.zero()) {
+					node = dag_node(0.0);
+				} else if ((A.one() && B.one()) || (A.none() && B.none())) {
+					node = dag_node(1.0);
+				} else if ((A.one() && B.none()) || (A.none() && B.one())) {
+					node = dag_node(-1.0);
+				} else if (A.one()) {
+					node = B;
+				} else if (B.one()) {
+					node = A;
+				} else if (A.none()) {
+					node = -B;
+				} else if (B.none()) {
+					node = -A;
+				} else if( A.neg() && B.neg()) {
+					node = B.neg_in() * A.neg_in();
+				} else if( A.neg()) {
+					node = -(B * A.neg_in());
+				} else if( B.neg()) {
+					node = -(B.neg_in() * A);
+				}
+				break;
+				case NEG:
+				if( A.neg()) {
+					node = A.neg_in();
+				}
+				break;
+			}
+		}
+
+		return node;
+	}
+
+	static dag_node optimize1(dag_node node) {
+		return node;
+		auto edges = graph->get_edges_in(node.id);
+		for( auto e : edges) {
+			dag_node other;
+			other.id = e;
+			other = optimize(other);
+		}
+		dag_node A;
+		dag_node B;
+		auto type = graph->get_type(node.id);
+		if( is_additive(type)) {
+			A.id = edges.front();
+			B.id = edges.back();
+			if( graph->get_type(A.id) == MUL && graph->get_type(B.id) == MUL) {
+				dag_node A0, A1;
+				dag_node B0, B1;
+				edges = graph->get_edges_in(A.id);
+				A0.id = edges.front();
+				A1.id = edges.back();
+				edges = graph->get_edges_in(B.id);
+				B0.id = edges.front();
+				B1.id = edges.back();
+				if( graph->get_type(A0.id) != CON ) {
+					std::swap(A1, A0);
+				}
+				if( graph->get_type(B0.id) != CON ) {
+					std::swap(B1, B0);
+				}
+				if( graph->get_type(A0.id) == CON && graph->get_type(B0.id) == CON && graph->get_type(A1.id) != CON && graph->get_type(B1.id) != CON ) {
+					if( !A0.zero() && !B0.zero() && !A0.one() && !B0.one() && !A0.none() && !B0.none()) {
+						if( A1.id == B1.id) {
+						} else {
+							auto aval = graph->get_value(A0.id);
+							auto bval = graph->get_value(B0.id);
+							if( type == ADD ) {
+								if( close2(aval, bval) ) {
+									node = A0 * (A1 + B1);
+								} else if( close2(aval, -bval) ) {
+									node = A0 * (A1 - B1);
+								} else if( aval < bval ) {
+									node = B0 * (B1 + dag_node(aval / bval) * A1);
+								} else {
+									node = A0 * (A1 + dag_node(bval / aval) * B1);
+								}
+							} else if( type == SUB ) {
+								if( close2(aval, bval) ) {
+									node = A0 * (A1 - B1);
+								} else if( close2(aval, -bval) ) {
+									node = A0 * (A1 + B1);
+								} else if( aval < bval ) {
+									node = B0 * (dag_node(aval / bval) * A1 - B1);
+								} else {
+									node = A0 * (A1 - dag_node(bval / aval) * B1);
+								}
+							} else if( type == NSUB ) {
+								if( close2(aval, bval) ) {
+									node = A0 * (B1 - A1);
+								} else if( close2(aval, -bval) ) {
+									node = -A0 * (A1 + B1);
+								} else if( aval < bval ) {
+									node = B0 * (B1 - dag_node(aval / bval) * A1);
+								} else {
+									node = A0 * (dag_node(bval / aval) * B1 - A1);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return node;
 	}
 
 	friend dag_node binary_op(vertex_type type, dag_node a, dag_node b) {
 		dag_node c;
-		c.id = graph->make_vertex(type);
-		graph->add_edge(a.id, c.id);
-		graph->add_edge(b.id, c.id);
-		auto edges_in = graph->get_edges_in(c.id);
-		return c;
+		if( a.id > b.id) {
+			std::swap(a, b);
+		}
+		if( common_binary[type][a.id].find(b.id) != common_binary[type][a.id].end()) {
+			c.id = common_binary[type][a.id][b.id];
+		} else {
+			c.id = graph->make_vertex(type);
+			graph->add_edge(a.id, c.id);
+			graph->add_edge(b.id, c.id);
+			auto edges_in = graph->get_edges_in(c.id);
+			common_binary[type][a.id][b.id] = c.id;
+			if( type == SUB ) {
+				common_binary[NSUB][a.id][b.id] = (-(a - b)).id;
+			} else if( type == NSUB) {
+				common_binary[SUB][a.id][b.id] = (-(b - a)).id;
+			}
+		}
+		return optimize(c);
 	}
 	friend dag_node unary_op(vertex_type type, dag_node a) {
 		dag_node c;
-		c.id = graph->make_vertex(type);
-		graph->add_edge(a.id, c.id);
-		return c;
+		if( common_unary[type].find(a.id) != common_unary[type].end()) {
+			c.id = common_unary[type][a.id];
+		} else {
+			c.id = graph->make_vertex(type);
+			graph->add_edge(a.id, c.id);
+			common_unary[type][a.id] = c.id;
+		}
+		return optimize(c);
 	}
 
 	friend dag_node operator+(dag_node a, dag_node b) {
 		if (a.id == b.id) {
 			return dag_node(2.0) * a;
-		} else if (a.zero()) {
-			return b;
-		} else if (b.zero()) {
-			return a;
 		} else {
 			return binary_op(ADD, a, b);
 		}
 	}
 
 	friend dag_node operator*(dag_node a, dag_node b) {
-		if (a.zero() || b.zero()) {
-			return dag_node(0.0);
-		} else if ((a.one() && b.one()) || (a.none() && b.none())) {
-			return dag_node(1.0);
-		} else if ((a.one() && b.none()) || (a.none() && b.one())) {
-			return dag_node(-1.0);
-		} else if (a.one()) {
-			return b;
-		} else if (b.one()) {
-			return a;
-		} else if (a.none()) {
-			return -b;
-		} else if (b.none()) {
-			return -a;
-		} else {
-			return binary_op(MUL, a, b);
-		}
+		return binary_op(MUL, a, b);
 	}
 
 	friend dag_node operator-(dag_node a) {
@@ -356,13 +573,7 @@ public:
 	}
 
 	friend dag_node operator-(dag_node a, dag_node b) {
-		if (a.zero() && b.zero()) {
-			return dag_node(0.0);
-		} else if (a.zero()) {
-			return -b;
-		} else if (b.zero()) {
-			return a;
-		} else if (a.id < b.id) {
+		if (a.id < b.id) {
 			return binary_op(SUB, a, b);
 		} else if (a.id > b.id) {
 			return binary_op(NSUB, b, a);
@@ -393,13 +604,11 @@ public:
 			if (iter != const_map.end()) {
 				if (close2(a, iter->first)) {
 					id = iter->second;
-					value = iter->first;
 					return;
 				} else if (iter != const_map.begin()) {
 					iter--;
 					if (close2(a, iter->first)) {
 						id = iter->second;
-						value = iter->first;
 						return;
 					}
 				}
@@ -407,7 +616,7 @@ public:
 			id = graph->make_vertex(CON);
 			graph->set_name(id, std::to_string(a));
 			const_map[a] = id;
-			value = a;
+			graph->set_value(id,a);
 		} else {
 			*this = -dag_node(-a);
 		}
@@ -454,6 +663,40 @@ public:
 
 	}
 	static void print_list() {
+		auto nodes = sort();
+		for( auto n : nodes) {
+			switch(graph->get_type(n)) {
+				case ADD:
+				printf( "ADD : ");
+				break;
+				case SUB:
+				printf( "SUB : ");
+				break;
+				case NSUB:
+				printf( "NSUB : ");
+				break;
+				case MUL:
+				printf( "MUL : ");
+				break;
+				case NEG:
+				printf( "NEG : ");
+				break;
+				case IN:
+				printf( "IN : ");
+				break;
+				case CON:
+				printf( "CON : ");
+				break;
+			}
+			printf( "%i | ", (int) n);
+			auto edges = graph->get_edges_in(n);
+			for( auto e : edges) {
+				printf( "%i ", (int) e);
+			}
+			printf( "\n");
+		}
+	}
+	static void print_code() {
 		auto nodes = sort();
 		int regcnt = 0;
 		std::set<vertex> completed;
@@ -503,7 +746,7 @@ public:
 							used_vars[other_nm] = other;
 							used_vars.erase(nm);
 							graph->set_name(other, other_nm);
-							printf("\t%s = %s; // !!!!!\n", other_nm.c_str(), nm.c_str());
+							printf("\t%s = %s;\n", other_nm.c_str(), nm.c_str());
 						}
 					}
 					out_vars.insert(nm);
@@ -517,27 +760,27 @@ public:
 				auto B = names.front();
 				auto C = names.back();
 				switch (type) {
-				case ADD:
+					case ADD:
 					assert(in.size() == 2);
 					printf("\t%s = %s + %s;\n", A.c_str(), B.c_str(), C.c_str());
 					break;
-				case SUB:
+					case SUB:
 					assert(in.size() == 2);
 					printf("\t%s = %s - %s;\n", A.c_str(), B.c_str(), C.c_str());
 					break;
-				case NSUB:
+					case NSUB:
 					assert(in.size() == 2);
 					printf("\t%s = %s - %s;\n", A.c_str(), C.c_str(), B.c_str());
 					break;
-				case MUL:
+					case MUL:
 					assert(in.size() == 2);
 					printf("\t%s = %s * %s;\n", A.c_str(), B.c_str(), C.c_str());
 					break;
-				case NEG:
+					case NEG:
 					assert(in.size() == 1);
 					printf("\t%s = -(%s);\n", A.c_str(), B.c_str());
 					break;
-				default:
+					default:
 					assert(in.size() == 0);
 					break;
 				}
@@ -571,21 +814,21 @@ public:
 		auto L = sort();
 		for (auto n : L) {
 			switch (graph->get_type(n)) {
-			case ADD:
-			case SUB:
-			case NSUB:
+				case ADD:
+				case SUB:
+				case NSUB:
 				cnt.add++;
 				cnt.tot++;
 				break;
-			case MUL:
+				case MUL:
 				cnt.mul++;
 				cnt.tot++;
 				break;
-			case NEG:
+				case NEG:
 				cnt.neg++;
 				cnt.tot++;
 				break;
-			default:
+				default:
 				break;
 			}
 		}
