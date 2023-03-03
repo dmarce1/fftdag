@@ -275,7 +275,7 @@ class dag_node {
 public:
 
 	bool zero() {
-		if( graph->get_type(id) == CON ) {
+		if (graph->get_type(id) == CON) {
 			return close2(value, 0.0);
 		} else {
 			return false;
@@ -283,7 +283,7 @@ public:
 	}
 
 	bool one() {
-		if( graph->get_type(id) == CON ) {
+		if (graph->get_type(id) == CON) {
 			return close2(value, 1.0);
 		} else {
 			return false;
@@ -291,7 +291,7 @@ public:
 	}
 
 	bool none() {
-		if( graph->get_type(id) == CON ) {
+		if (graph->get_type(id) == CON) {
 			return close2(value, -1.0);
 		} else {
 			return false;
@@ -320,16 +320,32 @@ public:
 	}
 
 	friend dag_node operator+(dag_node a, dag_node b) {
-		if( a.id == b.id ) {
+		if (a.id == b.id) {
 			return dag_node(2.0) * a;
+		} else if (a.zero()) {
+			return b;
+		} else if (b.zero()) {
+			return a;
 		} else {
 			return binary_op(ADD, a, b);
 		}
 	}
 
 	friend dag_node operator*(dag_node a, dag_node b) {
-		if( a.zero() || b.zero()) {
+		if (a.zero() || b.zero()) {
 			return dag_node(0.0);
+		} else if ((a.one() && b.one()) || (a.none() && b.none())) {
+			return dag_node(1.0);
+		} else if ((a.one() && b.none()) || (a.none() && b.one())) {
+			return dag_node(-1.0);
+		} else if (a.one()) {
+			return b;
+		} else if (b.one()) {
+			return a;
+		} else if (a.none()) {
+			return -b;
+		} else if (b.none()) {
+			return -a;
 		} else {
 			return binary_op(MUL, a, b);
 		}
@@ -340,9 +356,15 @@ public:
 	}
 
 	friend dag_node operator-(dag_node a, dag_node b) {
-		if (a.id < b.id) {
+		if (a.zero() && b.zero()) {
+			return dag_node(0.0);
+		} else if (a.zero()) {
+			return -b;
+		} else if (b.zero()) {
+			return a;
+		} else if (a.id < b.id) {
 			return binary_op(SUB, a, b);
-		} else if( a.id > b.id) {
+		} else if (a.id > b.id) {
 			return binary_op(NSUB, b, a);
 		} else {
 			return dag_node(0.0);
