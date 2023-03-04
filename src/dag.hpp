@@ -14,6 +14,7 @@
 #include <set>
 #include <unordered_set>
 #include <vector>
+#include <algorithm>
 #include <deque>
 #include <map>
 
@@ -48,6 +49,26 @@ inline bool is_additive(vertex_type t) {
 	default:
 		return false;
 	}
+}
+
+inline bool is_subtraction(vertex_type t) {
+	switch (t) {
+	case SUB:
+	case NSUB:
+		return true;
+	default:
+		return false;
+	}
+}
+
+inline bool is_antiops(vertex_type a, vertex_type b) {
+	if (a == SUB && b == NSUB) {
+		return true;
+	}
+	if (b == SUB && a == NSUB) {
+		return true;
+	}
+	return false;
 }
 
 class dag;
@@ -173,6 +194,11 @@ public:
 			return id == other.id;
 		}
 	};
+	struct add_type {
+		vertex v;
+		double c;
+	};
+
 	friend class vertex;
 	~dag() {
 		std::vector<int> vs;
@@ -279,6 +305,24 @@ public:
 		}
 		return vertex();
 	}
+	vertex find_antivertex(vertex_type type, std::vector<vertex> ins) {
+		std::vector<int> I(ins.begin(), ins.end());
+		if (ins.size() && is_subtraction(type)) {
+			auto x = edge_map[I[0]];
+			for (int i = 1; i < ins.size(); i++) {
+				x = intersection(x, edge_map[I[i]]);
+			}
+			for (auto y : x) {
+				if (is_antiops(map[y].type, type)) {
+					vertex v;
+					v.id = y;
+					inc(y);
+					return v;
+				}
+			}
+		}
+		return vertex();
+	}
 	std::vector<vertex> get_inputs() {
 		std::vector<vertex> ins;
 		for (auto i : inputs) {
@@ -322,9 +366,56 @@ public:
 	void set_value(vertex v, double val) {
 		map[v].value = val;
 	}
+	void set_type(vertex v, vertex_type type) {
+		map[v].type = type;
+	}
 	double get_value(vertex v) {
 		auto entry = map[v];
 		return entry.value;
+	}
+	std::vector<add_type> collect_adds(vertex v) {
+		std::vector<add_type> rc;
+		if (is_additive(map[v].type)) {
+			int i = 0;
+			auto edges_in = get_edges_in(v);
+			for (auto e : edges_in) {
+				auto tmp = collect_adds(e);
+				if ((i == 0 && map[v].type == NSUB) || (i == 1 && map[v].type == SUB)) {
+					for (auto& t : tmp) {
+						t.c = -t.c;
+					}
+				}
+				rc.insert(rc.end(), tmp.begin(), tmp.end());
+				i++;
+			}
+		} else {
+			add_type add;
+			auto edges = get_edges_in(v);
+			if (map[v].type == MUL) {
+				if (map[edges[0]].type == CON) {
+					add.v.id = edges[1];
+					add.c = get_value(edges[0]);
+					inc(add.v.id);
+				} else if (map[edges[1]].type == CON) {
+					add.v.id = edges[0];
+					add.c = get_value(edges[1]);
+					inc(add.v.id);
+				} else {
+					assert(false);
+				}
+			} else if (map[v].type == IN) {
+				add.c = 1.0;
+				add.v = v;
+			} else if (map[v].type == NEG) {
+				add.c = -1.0;
+				add.v.id = edges[0];
+				inc(add.v.id);
+			} else {
+				assert(false);
+			}
+			rc.push_back(add);
+		}
+		return rc;
 	}
 };
 
@@ -334,6 +425,14 @@ class dag_node {
 	static std::shared_ptr<dag> graph;
 	static std::map<double, vertex> const_map;
 public:
+	static void reset() {
+		const_map.clear();
+		graph = std::make_shared<dag>();
+	}
+	dag_node(vertex v) {
+		id = v;
+	}
+
 	bool operator<(const dag_node& other) {
 		return id < other.id;
 	}
@@ -378,6 +477,59 @@ public:
 		return in;
 	}
 
+	static dag_node optimize_adds(dag_node nd) {
+		auto adds = graph->collect_adds(nd.id);
+		std::map<double, std::vector<dag::add_type>> sorted_adds;
+		for (int i = 0; i < adds.size(); i++) {
+			auto j = sorted_adds.begin();
+			while (j != sorted_adds.end()) {
+				if (close2(j->first, std::abs(adds[i].c))) {
+					break;
+				}
+				j++;
+			}
+			if (j == sorted_adds.end()) {
+				sorted_adds[std::abs(adds[i].c)].clear();
+				j = sorted_adds.find(std::abs(adds[i].c));
+			}
+			j->second.push_back(adds[i]);
+		}
+		dag_node main_sum(0.0);
+		dag_node sum(0.0);
+		for (auto j = sorted_adds.begin(); j != sorted_adds.end(); j++) {
+			sum = dag_node(0.0);
+			for (auto v : j->second) {
+				assert(close2(std::abs(v.c), j->first));
+				if (v.c > 0.0) {
+					sum = sum + dag_node(v.v);
+				} else {
+					sum = sum - dag_node(v.v);
+				}
+			}
+			auto coeff = j->first;
+			if (close2(coeff, 1.0)) {
+			} else if (close2(coeff, -1.0)) {
+				sum = -sum;
+			} else {
+				sum = sum * dag_node(coeff);
+			}
+			main_sum = main_sum + sum;
+		}
+		sum = main_sum;
+		auto ei = graph->get_edges_in(nd.id);
+		for (auto e : ei) {
+			graph->remove_edge(e, nd.id);
+		}
+		ei = graph->get_edges_in(sum.id);
+		for (auto e : ei) {
+			graph->remove_edge(e, sum.id);
+			graph->add_edge(e, nd.id);
+		}
+		graph->set_type(nd.id, graph->get_type(sum.id));
+		graph->set_value(nd.id, graph->get_value(sum.id));
+		return nd;
+	}
+
 	static void optimize() {
 		auto outputs = graph->get_outputs();
 		graph->clear_outputs();
@@ -385,6 +537,7 @@ public:
 			dag_node c;
 			c.id = o;
 			auto nm = graph->get_name(o);
+			c = optimize_adds(c);
 			c = optimize(c);
 			graph->set_name(c.id, nm);
 			graph->set_output(c.id);
@@ -490,6 +643,12 @@ public:
 		if (common != nullptr) {
 			c.id = common;
 			return c;
+		} else {
+			auto common = graph->find_antivertex(type, std::vector<vertex>( { a.id, b.id }));
+			if (common != nullptr) {
+				c.id = common;
+				return -c;
+			}
 		}
 		if (a.id > b.id) {
 			std::swap(a, b);
@@ -502,6 +661,11 @@ public:
 	}
 	friend dag_node unary_op(vertex_type type, dag_node a) {
 		dag_node c;
+		auto common = graph->find_vertex(type, std::vector<vertex>( { a.id }));
+		if (common != nullptr) {
+			c.id = common;
+			return c;
+		}
 		c.id = graph->make_vertex(type);
 		graph->add_edge(a.id, c.id);
 		return optimize(c);
@@ -516,7 +680,12 @@ public:
 	}
 
 	friend dag_node operator*(dag_node a, dag_node b) {
-		return binary_op(MUL, a, b);
+		if (a.id == b.id && graph->get_type(a.id) == CON) {
+			auto v = graph->get_value(a.id);
+			return dag_node(v * v);
+		} else {
+			return binary_op(MUL, a, b);
+		}
 	}
 
 	friend dag_node operator-(dag_node a) {
@@ -786,7 +955,8 @@ public:
 		return cnt;
 	}
 
-};
+}
+;
 
 std::vector<dag_node> fft_prime_power(int R, std::vector<dag_node> xin, int N);
 
