@@ -195,11 +195,6 @@ public:
 			return id == other.id;
 		}
 	};
-	struct add_type {
-		vertex v;
-		double c;
-	};
-
 	friend class vertex;
 	~dag() {
 		std::vector<int> vs;
@@ -222,7 +217,7 @@ public:
 		}
 	}
 	dag() {
-		next_id = 0;
+		next_id = 1;
 	}
 	void backup() {
 		backup_map = map;
@@ -288,43 +283,24 @@ public:
 		}
 		return edges;
 	}
-	vertex find_vertex(vertex_type type, std::vector<vertex> ins) {
+	std::vector<vertex> find_vertices(std::vector<vertex> ins) {
 		std::vector<int> I(ins.begin(), ins.end());
 		if (ins.size()) {
 			auto x = edge_map[I[0]];
 			for (int i = 1; i < ins.size(); i++) {
 				x = intersection(x, edge_map[I[i]]);
 			}
-			for (auto y : x) {
-				if (map[y].type == type) {
-					vertex v;
-					v.id = y;
-					v.graph_ptr = this;
-					inc(y);
-					return v;
-				}
+			std::vector<vertex> y;
+			for( auto ele : x ) {
+				vertex v;
+				v.id = ele;
+				v.graph_ptr = this;
+				inc(ele);
+				y.push_back(v);
 			}
+			return std::vector<vertex>(y.begin(), y.end());
 		}
-		return vertex();
-	}
-	vertex find_antivertex(vertex_type type, std::vector<vertex> ins) {
-		std::vector<int> I(ins.begin(), ins.end());
-		if (ins.size() && is_subtraction(type)) {
-			auto x = edge_map[I[0]];
-			for (int i = 1; i < ins.size(); i++) {
-				x = intersection(x, edge_map[I[i]]);
-			}
-			for (auto y : x) {
-				if (is_antiops(map[y].type, type)) {
-					vertex v;
-					v.id = y;
-					v.graph_ptr = this;
-					inc(y);
-					return v;
-				}
-			}
-		}
-		return vertex();
+		return std::vector<vertex>();
 	}
 	std::vector<vertex> get_inputs() {
 		std::vector<vertex> ins;
@@ -376,45 +352,30 @@ public:
 		auto entry = map[v];
 		return entry.value;
 	}
-	std::vector<add_type> collect_adds(vertex v) {
-		std::vector<add_type> rc;
-		if (is_additive(map[v].type)) {
-			int i = 0;
-			auto edges_in = get_edges_in(v);
-			for (auto e : edges_in) {
-				auto tmp = collect_adds(e);
-				if ((i == 0 && map[v].type == NSUB) || (i == 1 && map[v].type == SUB)) {
-					for (auto& t : tmp) {
-						t.c = -t.c;
-					}
-				}
-				rc.insert(rc.end(), tmp.begin(), tmp.end());
-				i++;
-			}
-		} else {
-			add_type add;
+	std::vector<vertex> search(vertex v, std::set<vertex>& touched) {
+		std::vector<vertex> rc;
+		if (touched.find(v) == touched.end()) {
+			touched.insert(v);
 			auto edges = get_edges_in(v);
-			if (map[v].type == MUL) {
-				if (map[edges[0]].type == CON) {
-					add.v.id = edges[1];
-					add.c = get_value(edges[0]);
-				} else if (map[edges[1]].type == CON) {
-					add.v.id = edges[0];
-					add.c = get_value(edges[1]);
-				} else {
-					add.v.id = v;
-					add.c = 1;
-				}
-			} else if (map[v].type == IN) {
-				add.c = 1.0;
-				add.v = v;
-			} else {
-				add.c = -1.0;
-				add.v.id = edges[0];
+			for (auto c : edges) {
+				auto this_search = search(c, touched);
+				rc.insert(rc.end(), this_search.begin(), this_search.end());
 			}
-			rc.push_back(add);
+			rc.push_back(v);
 		}
 		return rc;
+	}
+
+	std::vector<vertex> sort() {
+		std::vector<vertex> L;
+		std::set<vertex> touched;
+		auto outputs = get_outputs();
+		for (auto o : outputs) {
+			auto tmp = search(o, touched);
+			L.insert(L.end(), tmp.begin(), tmp.end());
+		}
+		return L;
+
 	}
 };
 
@@ -424,6 +385,11 @@ class dag_node {
 	static std::shared_ptr<dag> graph;
 	static std::map<double, vertex> const_map;
 public:
+	struct add_type {
+		vertex v;
+		double c;
+	};
+
 	static void reset() {
 		const_map.clear();
 		graph = std::make_shared<dag>();
@@ -437,6 +403,24 @@ public:
 	}
 	bool operator==(const dag_node& other) {
 		return id == other.id;
+	}
+	static void optimize_adds() {
+		auto all = collect_all_adds();
+		for (auto a : all) {
+			fprintf( stderr, "\n");
+			for (auto b : a) {
+				fprintf( stderr, "%i\n", (int) b);
+			}
+		}
+	}
+	static vertex find_vertex(vertex_type type, std::vector<vertex> ins) {
+		auto vs = graph->find_vertices(ins);
+		for (auto v : vs) {
+			if (graph->get_type(v) == type) {
+				return v;
+			}
+		}
+		return vertex();
 	}
 	bool zero() {
 		if (graph->get_type(id) == CON) {
@@ -475,10 +459,87 @@ public:
 		in.id = graph->get_edges_in(id)[0];
 		return in;
 	}
+	static std::vector<add_type> collect_mults(vertex v) {
+		std::vector<add_type> rc;
+		if (is_additive(graph->get_type(v))) {
+			int i = 0;
+			auto edges_in = graph->get_edges_in(v);
+			for (auto e : edges_in) {
+				auto tmp = collect_mults(e);
+				if ((i == 0 && graph->get_type(v) == NSUB) || (i == 1 && graph->get_type(v) == SUB)) {
+					for (auto& t : tmp) {
+						t.c = -t.c;
+					}
+				}
+				rc.insert(rc.end(), tmp.begin(), tmp.end());
+				i++;
+			}
+		} else {
+			add_type add;
+			auto edges = graph->get_edges_in(v);
+			if (graph->get_type(v) == MUL) {
+				if (graph->get_type(edges[0]) == CON) {
+					add.v = edges[1];
+					add.c = graph->get_value(edges[0]);
+				} else if (graph->get_type(edges[1]) == CON) {
+					add.v = edges[0];
+					add.c = graph->get_value(edges[1]);
+				} else {
+					add.v = v;
+					add.c = 1;
+				}
+			} else if (graph->get_type(v) == IN) {
+				add.c = 1.0;
+				add.v = v;
+			} else {
+				add.c = -1.0;
+				add.v = edges[0];
+			}
+			rc.push_back(add);
+		}
+		return rc;
+	}
+	static std::vector<int> collect_adds(vertex v) {
+		std::vector<int> rc;
+		if (is_additive(graph->get_type(v))) {
+			int i = 0;
+			auto edges_in = graph->get_edges_in(v);
+			for (auto e : edges_in) {
+				auto tmp = collect_adds(e);
+				if ((i == 0 && graph->get_type(v) == NSUB) || (i == 1 && graph->get_type(v) == SUB)) {
+					for (auto& t : tmp) {
+						t = -t;
+					}
+				}
+				rc.insert(rc.end(), tmp.begin(), tmp.end());
+				i++;
+			}
+		} else {
+			rc.push_back(v);
+		}
+		return rc;
+	}
+	static std::vector<std::vector<int>> collect_all_adds() {
+		std::vector<std::vector<int>> rc;
+		auto nodes = graph->sort();
+		for (auto n : nodes) {
+			auto type = graph->get_type(n);
+			if (!is_additive(type)) {
+				auto edges_out = graph->get_edges_out(n);
+				for (auto edge : edges_out) {
+					auto this_type = graph->get_type(edge);
+					if (is_additive(this_type)) {
+						rc.push_back(collect_adds(edge));
+					}
+				}
+			}
+		}
+		return rc;
+	}
 
-	static dag_node optimize_adds(dag_node nd) {
-		auto adds = graph->collect_adds(nd.id);
-		std::map<double, std::vector<dag::add_type>> sorted_adds;
+	static dag_node optimize_mults(dag_node nd) {
+		auto adds = collect_mults(nd.id);
+		std::map<double, std::vector<add_type>> sorted_adds;
 		for (int i = 0; i < adds.size(); i++) {
 			auto j = sorted_adds.begin();
 			while (j != sorted_adds.end()) {
@@ -537,7 +598,7 @@ public:
 			dag_node c;
 			c.id = o;
 			auto nm = graph->get_name(o);
-			c = optimize_adds(c);
+			c = optimize_mults(c);
 			c = optimize(c);
 			graph->set_name(c.id, nm);
 			graph->set_output(c.id);
@@ -638,13 +699,19 @@ public:
 	}
 
 	friend dag_node binary_op(vertex_type type, dag_node a, dag_node b) {
-		auto common = graph->find_vertex(type, std::vector<vertex>( { a.id, b.id }));
+		auto common = find_vertex(type, std::vector<vertex>( { a.id, b.id }));
 		dag_node c;
 		if (common != nullptr) {
 			c.id = common;
 			return c;
 		} else {
-			auto common = graph->find_antivertex(type, std::vector<vertex>( { a.id, b.id }));
+			if (type == SUB) {
+				common = find_vertex(NSUB, std::vector<vertex>( { a.id, b.id }));
+			} else if (type == NSUB) {
+				common = find_vertex(SUB, std::vector<vertex>( { a.id, b.id }));
+			} else {
+				common = vertex();
+			}
 			if (common != nullptr) {
 				c.id = common;
 				return -c;
@@ -661,7 +728,7 @@ public:
 	}
 	friend dag_node unary_op(vertex_type type, dag_node a) {
 		dag_node c;
-		auto common = graph->find_vertex(type, std::vector<vertex>( { a.id }));
+		auto common = find_vertex(type, std::vector<vertex>( { a.id }));
 		if (common != nullptr) {
 			c.id = common;
 			return c;
@@ -758,32 +825,8 @@ public:
 		}
 	}
 
-	static std::vector<vertex> search(vertex v, std::set<vertex>& touched) {
-		std::vector<vertex> rc;
-		if (touched.find(v) == touched.end()) {
-			touched.insert(v);
-			auto edges = graph->get_edges_in(v);
-			for (auto c : edges) {
-				auto this_search = search(c, touched);
-				rc.insert(rc.end(), this_search.begin(), this_search.end());
-			}
-			rc.push_back(v);
-		}
-		return rc;
-	}
-	static std::vector<vertex> sort() {
-		std::vector<vertex> L;
-		std::set<vertex> touched;
-		auto outputs = graph->get_outputs();
-		for (auto o : outputs) {
-			auto tmp = search(o, touched);
-			L.insert(L.end(), tmp.begin(), tmp.end());
-		}
-		return L;
-
-	}
 	static void print_list() {
-		auto nodes = sort();
+		auto nodes = graph->sort();
 		for (auto n : nodes) {
 			switch (graph->get_type(n)) {
 			case ADD:
@@ -817,7 +860,7 @@ public:
 		}
 	}
 	static void print_code() {
-		auto nodes = sort();
+		auto nodes = graph->sort();
 		int regcnt = 0;
 		std::set<vertex> completed;
 		std::set<std::string> free_vars;
@@ -931,7 +974,7 @@ public:
 	static opcnt_t get_operation_count() {
 		opcnt_t cnt;
 		cnt.add = cnt.mul = cnt.neg = cnt.tot = 0;
-		auto L = sort();
+		auto L = graph->sort();
 		for (auto n : L) {
 			switch (graph->get_type(n)) {
 			case ADD:
