@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <vector>
 #include <algorithm>
+#include <numeric>
 #include <deque>
 #include <map>
 
@@ -298,6 +299,7 @@ public:
 				if (map[y].type == type) {
 					vertex v;
 					v.id = y;
+					v.graph_ptr = this;
 					inc(y);
 					return v;
 				}
@@ -316,6 +318,7 @@ public:
 				if (is_antiops(map[y].type, type)) {
 					vertex v;
 					v.id = y;
+					v.graph_ptr = this;
 					inc(y);
 					return v;
 				}
@@ -395,23 +398,19 @@ public:
 				if (map[edges[0]].type == CON) {
 					add.v.id = edges[1];
 					add.c = get_value(edges[0]);
-					inc(add.v.id);
 				} else if (map[edges[1]].type == CON) {
 					add.v.id = edges[0];
 					add.c = get_value(edges[1]);
-					inc(add.v.id);
 				} else {
-					assert(false);
+					add.v.id = v;
+					add.c = 1;
 				}
 			} else if (map[v].type == IN) {
 				add.c = 1.0;
 				add.v = v;
-			} else if (map[v].type == NEG) {
+			} else {
 				add.c = -1.0;
 				add.v.id = edges[0];
-				inc(add.v.id);
-			} else {
-				assert(false);
 			}
 			rc.push_back(add);
 		}
@@ -498,7 +497,8 @@ public:
 		dag_node sum(0.0);
 		for (auto j = sorted_adds.begin(); j != sorted_adds.end(); j++) {
 			sum = dag_node(0.0);
-			for (auto v : j->second) {
+			for (int i = 0; i < j->second.size(); i++) {
+				auto v = j->second[i];
 				assert(close2(std::abs(v.c), j->first));
 				if (v.c > 0.0) {
 					sum = sum + dag_node(v.v);
