@@ -59,6 +59,19 @@ struct opcnt_t {
 	int tot;
 };
 
+struct set_key {
+	size_t operator()(const std::set<int>& s) const {
+		int key = 1234;
+		for (auto i : s) {
+			key += 42;
+			key *= (1234 + i);
+		}
+		return key;
+	}
+};
+
+std::set<int> intersection(const std::set<int>& A, const std::set<int>& B);
+
 class dag {
 	struct dag_entry {
 		vertex_type type;
@@ -74,6 +87,7 @@ class dag {
 	};
 	int next_id;
 	std::unordered_map<int, dag_entry> map;
+	std::unordered_map<int, std::set<int>> edge_map;
 	std::unordered_map<int, dag_entry> backup_map;
 	std::set<int> inputs;
 	std::set<int> outputs;
@@ -87,6 +101,7 @@ class dag {
 			auto in = map[j].in;
 			auto out = map[j].out;
 			for (auto i : in) {
+				edge_map[j].erase(i);
 				map[i].out.erase(j);
 				dec(i);
 			}
@@ -96,26 +111,6 @@ class dag {
 		}
 	}
 public:
-	~dag() {
-		std::vector<int> vs;
-		for (auto v : map) {
-			vs.push_back(v.first);
-		}
-		for (auto v : vs) {
-			auto eout = map[v].out;
-			auto ein = map[v].in;
-			for (auto e : eout) {
-				map[v].out.erase(e);
-				map[e].in.erase(v);
-				dec(v);
-			}
-			for (auto e : ein) {
-				map[e].out.erase(v);
-				map[v].in.erase(e);
-				dec(e);
-			}
-		}
-	}
 	class vertex {
 		dag* graph_ptr;
 		int id;
@@ -128,6 +123,12 @@ public:
 			}
 		}
 	public:
+		bool operator==(void* ptr) const {
+			return (ptr == nullptr) && (id == -1);
+		}
+		bool operator!=(void* ptr) const {
+			return !((ptr == nullptr) && (id == -1));
+		}
 		operator int() const {
 			return id;
 		}
@@ -173,6 +174,26 @@ public:
 		}
 	};
 	friend class vertex;
+	~dag() {
+		std::vector<int> vs;
+		for (auto v : map) {
+			vs.push_back(v.first);
+		}
+		for (auto v : vs) {
+			auto eout = map[v].out;
+			auto ein = map[v].in;
+			for (auto e : eout) {
+				map[v].out.erase(e);
+				map[e].in.erase(v);
+				dec(v);
+			}
+			for (auto e : ein) {
+				map[e].out.erase(v);
+				map[v].in.erase(e);
+				dec(e);
+			}
+		}
+	}
 	dag() {
 		next_id = 0;
 	}
@@ -204,6 +225,7 @@ public:
 		assert(map[from].out.find(to) == map[from].out.end());
 		assert(map[to].in.find(from) == map[to].in.end());
 		map[from].out.insert(to);
+		edge_map[from].insert(to);
 		map[to].in.insert(from);
 		inc(from);
 	}
@@ -211,6 +233,7 @@ public:
 		assert(map[from].out.find(to) != map[from].out.end());
 		assert(map[to].in.find(from) != map[to].in.end());
 		map[from].out.erase(to);
+		edge_map[from].erase(to);
 		map[to].in.erase(from);
 		dec(from);
 	}
@@ -237,6 +260,24 @@ public:
 			edges.push_back(v);
 		}
 		return edges;
+	}
+	vertex find_vertex(vertex_type type, std::vector<vertex> ins) {
+		std::vector<int> I(ins.begin(), ins.end());
+		if (ins.size()) {
+			auto x = edge_map[I[0]];
+			for (int i = 1; i < ins.size(); i++) {
+				x = intersection(x, edge_map[I[i]]);
+			}
+			for (auto y : x) {
+				if (map[y].type == type) {
+					vertex v;
+					v.id = y;
+					inc(y);
+					return v;
+				}
+			}
+		}
+		return vertex();
 	}
 	std::vector<vertex> get_inputs() {
 		std::vector<vertex> ins;
@@ -292,8 +333,6 @@ class dag_node {
 	vertex id;
 	static std::shared_ptr<dag> graph;
 	static std::map<double, vertex> const_map;
-	static std::unordered_map<vertex_type, std::map<vertex, std::map<vertex, vertex>>>common_binary;
-	static std::unordered_map<vertex_type, std::map<vertex, vertex>> common_unary;
 public:
 	bool operator<(const dag_node& other) {
 		return id < other.id;
@@ -353,12 +392,8 @@ public:
 	}
 
 	static dag_node optimize(dag_node node) {
-		return optimize2(optimize1(node));
-	}
-
-	static dag_node optimize2(dag_node node) {
 		auto edges = graph->get_edges_in(node.id);
-		for( auto e : edges) {
+		for (auto e : edges) {
 			dag_node other;
 			other.id = e;
 			other = optimize(other);
@@ -366,56 +401,56 @@ public:
 		dag_node A;
 		dag_node B;
 		auto type = graph->get_type(node.id);
-		if(is_arithmetic(type)) {
+		if (is_arithmetic(type)) {
 			A.id = edges.front();
 			B.id = edges.back();
-			switch(type) {
-				case ADD:
+			switch (type) {
+			case ADD:
 				if (A.zero() && B.zero()) {
 					node = dag_node(0.0);
-				} else if( A.zero()) {
+				} else if (A.zero()) {
 					node = B;
-				} else if( B.zero()) {
+				} else if (B.zero()) {
 					node = A;
-				} else if( A.neg() && B.neg()) {
+				} else if (A.neg() && B.neg()) {
 					node = -(A.neg_in() + B.neg_in());
-				} else if( A.neg()) {
+				} else if (A.neg()) {
 					node = B - A.neg_in();
-				} else if( B.neg()) {
+				} else if (B.neg()) {
 					node = A - B.neg_in();
 				}
 				break;
-				case SUB:
+			case SUB:
 				if (A.zero() && B.zero()) {
 					node = dag_node(0.0);
-				} else if( A.zero()) {
+				} else if (A.zero()) {
 					node = -B;
-				} else if( B.zero()) {
+				} else if (B.zero()) {
 					node = A;
-				} else if( A.neg() && B.neg()) {
+				} else if (A.neg() && B.neg()) {
 					node = B.neg_in() - A.neg_in();
-				} else if( A.neg()) {
+				} else if (A.neg()) {
 					node = -(B + A.neg_in());
-				} else if( B.neg()) {
+				} else if (B.neg()) {
 					node = A + B.neg_in();
 				}
 				break;
-				case NSUB:
+			case NSUB:
 				if (A.zero() && B.zero()) {
 					node = dag_node(0.0);
-				} else if( A.zero()) {
+				} else if (A.zero()) {
 					node = B;
-				} else if( B.zero()) {
+				} else if (B.zero()) {
 					node = -A;
-				} else if( A.neg() && B.neg()) {
+				} else if (A.neg() && B.neg()) {
 					node = A.neg_in() - B.neg_in();
-				} else if( B.neg()) {
+				} else if (B.neg()) {
 					node = -(A + B.neg_in());
-				} else if( A.neg()) {
+				} else if (A.neg()) {
 					node = B + A.neg_in();
 				}
 				break;
-				case MUL:
+			case MUL:
 				if (A.zero() || B.zero()) {
 					node = dag_node(0.0);
 				} else if ((A.one() && B.one()) || (A.none() && B.none())) {
@@ -430,16 +465,16 @@ public:
 					node = -B;
 				} else if (B.none()) {
 					node = -A;
-				} else if( A.neg() && B.neg()) {
+				} else if (A.neg() && B.neg()) {
 					node = B.neg_in() * A.neg_in();
-				} else if( A.neg()) {
+				} else if (A.neg()) {
 					node = -(B * A.neg_in());
-				} else if( B.neg()) {
+				} else if (B.neg()) {
 					node = -(B.neg_in() * A);
 				}
 				break;
-				case NEG:
-				if( A.neg()) {
+			case NEG:
+				if (A.neg()) {
 					node = A.neg_in();
 				}
 				break;
@@ -449,110 +484,26 @@ public:
 		return node;
 	}
 
-	static dag_node optimize1(dag_node node) {
-		return node;
-		auto edges = graph->get_edges_in(node.id);
-		for( auto e : edges) {
-			dag_node other;
-			other.id = e;
-			other = optimize(other);
-		}
-		dag_node A;
-		dag_node B;
-		auto type = graph->get_type(node.id);
-		if( is_additive(type)) {
-			A.id = edges.front();
-			B.id = edges.back();
-			if( graph->get_type(A.id) == MUL && graph->get_type(B.id) == MUL) {
-				dag_node A0, A1;
-				dag_node B0, B1;
-				edges = graph->get_edges_in(A.id);
-				A0.id = edges.front();
-				A1.id = edges.back();
-				edges = graph->get_edges_in(B.id);
-				B0.id = edges.front();
-				B1.id = edges.back();
-				if( graph->get_type(A0.id) != CON ) {
-					std::swap(A1, A0);
-				}
-				if( graph->get_type(B0.id) != CON ) {
-					std::swap(B1, B0);
-				}
-				if( graph->get_type(A0.id) == CON && graph->get_type(B0.id) == CON && graph->get_type(A1.id) != CON && graph->get_type(B1.id) != CON ) {
-					if( !A0.zero() && !B0.zero() && !A0.one() && !B0.one() && !A0.none() && !B0.none()) {
-						if( A1.id == B1.id) {
-						} else {
-							auto aval = graph->get_value(A0.id);
-							auto bval = graph->get_value(B0.id);
-							if( type == ADD ) {
-								if( close2(aval, bval) ) {
-									node = A0 * (A1 + B1);
-								} else if( close2(aval, -bval) ) {
-									node = A0 * (A1 - B1);
-								} else if( aval < bval ) {
-									node = B0 * (B1 + dag_node(aval / bval) * A1);
-								} else {
-									node = A0 * (A1 + dag_node(bval / aval) * B1);
-								}
-							} else if( type == SUB ) {
-								if( close2(aval, bval) ) {
-									node = A0 * (A1 - B1);
-								} else if( close2(aval, -bval) ) {
-									node = A0 * (A1 + B1);
-								} else if( aval < bval ) {
-									node = B0 * (dag_node(aval / bval) * A1 - B1);
-								} else {
-									node = A0 * (A1 - dag_node(bval / aval) * B1);
-								}
-							} else if( type == NSUB ) {
-								if( close2(aval, bval) ) {
-									node = A0 * (B1 - A1);
-								} else if( close2(aval, -bval) ) {
-									node = -A0 * (A1 + B1);
-								} else if( aval < bval ) {
-									node = B0 * (B1 - dag_node(aval / bval) * A1);
-								} else {
-									node = A0 * (dag_node(bval / aval) * B1 - A1);
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		return node;
-	}
-
 	friend dag_node binary_op(vertex_type type, dag_node a, dag_node b) {
+		auto common = graph->find_vertex(type, std::vector<vertex>( { a.id, b.id }));
 		dag_node c;
-		if( a.id > b.id) {
+		if (common != nullptr) {
+			c.id = common;
+			return c;
+		}
+		if (a.id > b.id) {
 			std::swap(a, b);
 		}
-		if( common_binary[type][a.id].find(b.id) != common_binary[type][a.id].end()) {
-			c.id = common_binary[type][a.id][b.id];
-		} else {
-			c.id = graph->make_vertex(type);
-			graph->add_edge(a.id, c.id);
-			graph->add_edge(b.id, c.id);
-			auto edges_in = graph->get_edges_in(c.id);
-			common_binary[type][a.id][b.id] = c.id;
-			if( type == SUB ) {
-				common_binary[NSUB][a.id][b.id] = (-(a - b)).id;
-			} else if( type == NSUB) {
-				common_binary[SUB][a.id][b.id] = (-(b - a)).id;
-			}
-		}
+		c.id = graph->make_vertex(type);
+		graph->add_edge(a.id, c.id);
+		graph->add_edge(b.id, c.id);
+		auto edges_in = graph->get_edges_in(c.id);
 		return optimize(c);
 	}
 	friend dag_node unary_op(vertex_type type, dag_node a) {
 		dag_node c;
-		if( common_unary[type].find(a.id) != common_unary[type].end()) {
-			c.id = common_unary[type][a.id];
-		} else {
-			c.id = graph->make_vertex(type);
-			graph->add_edge(a.id, c.id);
-			common_unary[type][a.id] = c.id;
-		}
+		c.id = graph->make_vertex(type);
+		graph->add_edge(a.id, c.id);
 		return optimize(c);
 	}
 
@@ -616,7 +567,7 @@ public:
 			id = graph->make_vertex(CON);
 			graph->set_name(id, std::to_string(a));
 			const_map[a] = id;
-			graph->set_value(id,a);
+			graph->set_value(id, a);
 		} else {
 			*this = -dag_node(-a);
 		}
@@ -664,36 +615,36 @@ public:
 	}
 	static void print_list() {
 		auto nodes = sort();
-		for( auto n : nodes) {
-			switch(graph->get_type(n)) {
-				case ADD:
-				printf( "ADD : ");
+		for (auto n : nodes) {
+			switch (graph->get_type(n)) {
+			case ADD:
+				printf("ADD : ");
 				break;
-				case SUB:
-				printf( "SUB : ");
+			case SUB:
+				printf("SUB : ");
 				break;
-				case NSUB:
-				printf( "NSUB : ");
+			case NSUB:
+				printf("NSUB : ");
 				break;
-				case MUL:
-				printf( "MUL : ");
+			case MUL:
+				printf("MUL : ");
 				break;
-				case NEG:
-				printf( "NEG : ");
+			case NEG:
+				printf("NEG : ");
 				break;
-				case IN:
-				printf( "IN : ");
+			case IN:
+				printf("IN : ");
 				break;
-				case CON:
-				printf( "CON : ");
+			case CON:
+				printf("CON : ");
 				break;
 			}
-			printf( "%i | ", (int) n);
+			printf("%i | ", (int) n);
 			auto edges = graph->get_edges_in(n);
-			for( auto e : edges) {
-				printf( "%i ", (int) e);
+			for (auto e : edges) {
+				printf("%i ", (int) e);
 			}
-			printf( "\n");
+			printf("\n");
 		}
 	}
 	static void print_code() {
@@ -760,27 +711,27 @@ public:
 				auto B = names.front();
 				auto C = names.back();
 				switch (type) {
-					case ADD:
+				case ADD:
 					assert(in.size() == 2);
 					printf("\t%s = %s + %s;\n", A.c_str(), B.c_str(), C.c_str());
 					break;
-					case SUB:
+				case SUB:
 					assert(in.size() == 2);
 					printf("\t%s = %s - %s;\n", A.c_str(), B.c_str(), C.c_str());
 					break;
-					case NSUB:
+				case NSUB:
 					assert(in.size() == 2);
 					printf("\t%s = %s - %s;\n", A.c_str(), C.c_str(), B.c_str());
 					break;
-					case MUL:
+				case MUL:
 					assert(in.size() == 2);
 					printf("\t%s = %s * %s;\n", A.c_str(), B.c_str(), C.c_str());
 					break;
-					case NEG:
+				case NEG:
 					assert(in.size() == 1);
 					printf("\t%s = -(%s);\n", A.c_str(), B.c_str());
 					break;
-					default:
+				default:
 					assert(in.size() == 0);
 					break;
 				}
@@ -814,21 +765,21 @@ public:
 		auto L = sort();
 		for (auto n : L) {
 			switch (graph->get_type(n)) {
-				case ADD:
-				case SUB:
-				case NSUB:
+			case ADD:
+			case SUB:
+			case NSUB:
 				cnt.add++;
 				cnt.tot++;
 				break;
-				case MUL:
+			case MUL:
 				cnt.mul++;
 				cnt.tot++;
 				break;
-				case NEG:
+			case NEG:
 				cnt.neg++;
 				cnt.tot++;
 				break;
-				default:
+			default:
 				break;
 			}
 		}
