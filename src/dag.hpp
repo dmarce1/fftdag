@@ -72,6 +72,7 @@ inline bool is_antiops(vertex_type a, vertex_type b) {
 	return false;
 }
 
+template<class Properties>
 class dag;
 
 struct opcnt_t {
@@ -94,17 +95,24 @@ struct set_key {
 
 std::set<int> intersection(const std::set<int>& A, const std::set<int>& B);
 
+struct math_props {
+	vertex_type type;
+	std::string name;
+	double value;
+	math_props() {
+		type = INVALID;
+	}
+};
+
+template<class Properties>
 class dag {
 	struct dag_entry {
-		vertex_type type;
 		std::set<int> out;
 		std::set<int> in;
-		std::string name;
-		double value;
+		Properties props;
 		int cnt;
 		dag_entry() {
 			cnt = 0;
-			type = INVALID;
 		}
 	};
 	int next_id;
@@ -225,13 +233,12 @@ public:
 	void restore() {
 		map = std::move(backup_map);
 	}
-	vertex make_vertex(vertex_type type) {
+	vertex make_vertex(bool in) {
 		vertex rc;
 		rc.id = next_id++;
 		rc.graph_ptr = this;
-		map[rc.id].type = type;
 		inc(rc.id);
-		if (type == IN) {
+		if (in) {
 			inputs.insert(rc.id);
 		}
 		return rc;
@@ -324,34 +331,6 @@ public:
 		}
 		return outs;
 	}
-	void set_name(vertex v, std::string nm) {
-		assert(map.find(v) != map.end());
-		map[v].name = nm;
-	}
-	std::string get_name(vertex v) {
-		return map[v].name;
-	}
-	std::vector<std::string> get_names(std::vector<vertex> vs) {
-		std::vector<std::string> rc;
-		for (auto v : vs) {
-			rc.push_back(map[v].name);
-		}
-		return rc;
-	}
-	vertex_type get_type(vertex v) {
-		auto entry = map[v];
-		return entry.type;
-	}
-	void set_value(vertex v, double val) {
-		map[v].value = val;
-	}
-	void set_type(vertex v, vertex_type type) {
-		map[v].type = type;
-	}
-	double get_value(vertex v) {
-		auto entry = map[v];
-		return entry.value;
-	}
 	std::vector<vertex> search(vertex v, std::set<vertex>& touched) {
 		std::vector<vertex> rc;
 		if (touched.find(v) == touched.end()) {
@@ -377,12 +356,53 @@ public:
 		return L;
 
 	}
+	Properties& props(vertex v) {
+		return map[v].props;
+	}
 };
 
+
+
+class math_dag : public dag<math_props> {
+public:
+	vertex make_vertex(vertex_type type) {
+		vertex rc = dag<math_props>::make_vertex(type==IN);
+		set_type(rc, type);
+		return rc;
+	}
+	void set_name(vertex v, std::string nm) {
+		props(v).name = nm;
+	}
+	std::string get_name(vertex v) {
+		return props(v).name;
+	}
+	std::vector<std::string> get_names(std::vector<vertex> vs) {
+		std::vector<std::string> rc;
+		for (auto v : vs) {
+			rc.push_back(props(v).name);
+		}
+		return rc;
+	}
+	vertex_type get_type(vertex v) {
+		return props(v).type;
+	}
+	void set_value(vertex v, double val) {
+		props(v).value = val;
+	}
+	void set_type(vertex v, vertex_type type) {
+		props(v).type = type;
+	}
+	double get_value(vertex v) {
+		return props(v).value;
+	}
+};
+
+
+
 class dag_node {
-	using vertex = dag::vertex;
+	using vertex = dag<math_props>::vertex;
 	vertex id;
-	static std::shared_ptr<dag> graph;
+	static std::shared_ptr<math_dag> graph;
 	static std::map<double, vertex> const_map;
 public:
 	struct add_type {
@@ -392,7 +412,7 @@ public:
 
 	static void reset() {
 		const_map.clear();
-		graph = std::make_shared<dag>();
+		graph = std::make_shared<math_dag>();
 	}
 	dag_node(vertex v) {
 		id = v;
