@@ -18,6 +18,7 @@
 #include <numeric>
 #include <deque>
 #include <map>
+#include "util.hpp"
 
 enum vertex_type {
 	INVALID, ADD, NEG, MUL, IN, CON, SUB, NSUB
@@ -93,8 +94,24 @@ struct set_key {
 	}
 };
 
-std::set<int> intersection(const std::set<int>& A, const std::set<int>& B);
-std::set<int> antiset(const std::set<int>& A);
+template<class T>
+std::set<T> intersection(const std::set<T>& A, const std::set<T>& B) {
+	std::set<T> C;
+	for (auto b : B) {
+		if (A.find(b) != A.end()) {
+			C.insert(b);
+		}
+	}
+	return C;
+}
+
+template<class T>
+std::set<T> operator-(std::set<T> A, const std::set<T>& B) {
+	for (auto b : B) {
+		A.erase(b);
+	}
+	return A;
+}
 
 struct math_props {
 	vertex_type type;
@@ -482,15 +499,93 @@ public:
 			}
 			fprintf( stderr, "\n");
 		}
-		for( auto i : targets) {
-			for( auto j : targets) {
-				if( i.first != j.first ) {
-			//		auto ipos = intersection(i.second.pos, j.second.pos);
-			//		auto ineg = intersection(i.second.neg, j.second.neg);
-				//	int itot = ipos.size() + ineg.size();
-				//	fprintf( stderr, "%i\n", itot);
+		std::vector<vertex> targ_vec;
+		for (auto i : targets) {
+			targ_vec.push_back(i.first);
+		}
+		struct intersection_t {
+			vertex v;
+			int sgn;
+		};
+		int N = targets.size();
+		for (int k = N; k >= 2; k--) {
+			int best_score;
+			do {
+				best_score = 0;
+				std::vector<intersection_t> intersections;
+				const auto combos = nchoosek(N, k);
+				int itot;
+				fprintf( stderr, "combos.size() = %i\n", combos.size());
+				std::vector<intersection_t> best_intersections;
+				adds_t adds;
+				adds_t best_adds;
+				for (const auto& combo : combos) {
+					for (auto i : combo) {
+						auto I = targ_vec[i];
+						std::set<vertex> padds, nadds;
+						std::set<vertex> padds1, nadds1;
+						if (adds.pos.size() + adds.neg.size() == 0) {
+							padds.insert(targets[I].pos.begin(), targets[I].pos.end());
+							nadds.insert(targets[I].neg.begin(), targets[I].neg.end());
+						} else {
+							padds = intersection(adds.pos, targets[I].pos);
+							nadds = intersection(adds.neg, targets[I].neg);
+						}
+						if (adds.pos.size() + adds.neg.size() == 0) {
+							nadds1.insert(targets[I].pos.begin(), targets[I].pos.end());
+							padds1.insert(targets[I].neg.begin(), targets[I].neg.end());
+						} else {
+							nadds1 = intersection(adds.pos, targets[I].pos);
+							padds1 = intersection(adds.neg, targets[I].neg);
+						}
+						intersection_t entry;
+						entry.v = I;
+						if (padds.size() + nadds.size() < padds1.size() + nadds1.size()) {
+							std::swap(padds, padds1);
+							std::swap(nadds, nadds1);
+							entry.sgn = -1;
+						} else {
+							entry.sgn = +1;
+						}
+						adds.pos = std::move(padds1);
+						adds.neg = std::move(nadds1);
+						itot = adds.pos.size() + adds.neg.size();
+						if (itot <= 1) {
+							break;
+						}
+						intersections.push_back(entry);
+					}
+					if (itot > best_score) {
+						best_score = itot;
+						best_adds = std::move(adds);
+						best_intersections = std::move(intersections);
+					}
 				}
-			}
+				if (best_score >= 2) {
+					intersections = std::move(best_intersections);
+					adds = std::move(best_adds);
+					dag_node sum = dag_node(0.0);
+					for (auto p : adds.pos) {
+						sum = sum + dag_node(p);
+					}
+					for (auto n : adds.neg) {
+						sum = sum - dag_node(n);
+					}
+					for (auto i : intersections) {
+						auto& target = targets[i.v];
+						if (i.sgn > 0) {
+							target.pos = target.pos - adds.pos;
+							target.neg = target.neg - adds.neg;
+							target.pos.insert(sum.id);
+						} else {
+							target.pos = target.pos - adds.neg;
+							target.neg = target.neg - adds.pos;
+							target.neg.insert(sum.id);
+						}
+					}
+					fprintf( stderr, "%i %i %i\n", N, k, best_score);
+				}
+			} while (best_score >= 2);
 		}
 	}
 	static vertex find_vertex(vertex_type type, std::vector<vertex> ins) {
