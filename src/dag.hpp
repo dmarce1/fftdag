@@ -131,7 +131,7 @@ class dag {
 			auto in = map[j].in;
 			auto out = map[j].out;
 			for (auto i : in) {
-				edge_map[j].erase(i);
+				edge_map[i].erase(j);
 				map[i].out.erase(j);
 				dec(i);
 			}
@@ -143,50 +143,59 @@ class dag {
 public:
 	class vertex {
 		dag* graph_ptr;
-		int id;
+		int vtx;
 		friend class dag;
 		void destroy() {
 			if (graph_ptr) {
-				assert(graph_ptr->map.find(id) != graph_ptr->map.end());
-				graph_ptr->dec(id);
+				assert(graph_ptr->map.find(vtx) != graph_ptr->map.end());
+				graph_ptr->dec(vtx);
 				graph_ptr = nullptr;
 			}
 		}
 	public:
+		vertex() {
+			vtx = -1;
+			graph_ptr = nullptr;
+		}
 		bool operator==(void* ptr) const {
-			return (ptr == nullptr) && (id == -1);
+			return (ptr == nullptr) && (vtx == -1);
 		}
 		bool operator!=(void* ptr) const {
-			return !((ptr == nullptr) && (id == -1));
+			return !((ptr == nullptr) && (vtx == -1));
 		}
 		operator int() const {
-			return id;
+			return vtx;
 		}
-		vertex() {
-			id = -1;
-			graph_ptr = nullptr;
+		vertex(int id, dag* ptr) {
+			graph_ptr = ptr;
+			vtx = id;
+			graph_ptr->inc(vtx);
 		}
+		/*		vertex() {
+		 id = -1;
+		 graph_ptr = nullptr;
+		 }*/
 		vertex(const vertex& other) {
 			graph_ptr = nullptr;
-			id = -1;
+			vtx = -1;
 			*this = other;
 		}
 		vertex(vertex&& other) {
 			graph_ptr = nullptr;
-			id = -1;
+			vtx = -1;
 			*this = std::move(other);
 		}
 		vertex& operator=(const vertex& other) {
 			destroy();
-			id = other.id;
+			vtx = other.vtx;
 			graph_ptr = other.graph_ptr;
 			if (graph_ptr) {
-				graph_ptr->inc(id);
+				graph_ptr->inc(vtx);
 			}
 			return *this;
 		}
 		vertex& operator=(vertex&& other) {
-			std::swap(id, other.id);
+			std::swap(vtx, other.vtx);
 			std::swap(graph_ptr, other.graph_ptr);
 			return *this;
 		}
@@ -194,13 +203,13 @@ public:
 			destroy();
 		}
 		bool operator<(const vertex& other) const {
-			return id < other.id;
+			return vtx < other.vtx;
 		}
 		bool operator>(const vertex& other) const {
-			return id > other.id;
+			return vtx > other.vtx;
 		}
 		bool operator==(const vertex& other) const {
-			return id == other.id;
+			return vtx == other.vtx;
 		}
 	};
 	friend class vertex;
@@ -234,12 +243,9 @@ public:
 		map = std::move(backup_map);
 	}
 	vertex make_vertex(bool in) {
-		vertex rc;
-		rc.id = next_id++;
-		rc.graph_ptr = this;
-		inc(rc.id);
+		vertex rc(next_id++, this);
 		if (in) {
-			inputs.insert(rc.id);
+			inputs.insert(rc.vtx);
 		}
 		return rc;
 	}
@@ -270,10 +276,7 @@ public:
 		assert(map.find(v) != map.end());
 		std::vector<vertex> edges;
 		for (auto e : map[v].in) {
-			vertex v;
-			v.id = e;
-			v.graph_ptr = this;
-			inc(e);
+			vertex v(e, this);
 			edges.push_back(v);
 		}
 		return edges;
@@ -282,10 +285,7 @@ public:
 		assert(map.find(v) != map.end());
 		std::vector<vertex> edges;
 		for (auto e : map[v].out) {
-			vertex v;
-			v.id = e;
-			v.graph_ptr = this;
-			inc(e);
+			vertex v(e, this);
 			edges.push_back(v);
 		}
 		return edges;
@@ -298,11 +298,8 @@ public:
 				x = intersection(x, edge_map[I[i]]);
 			}
 			std::vector<vertex> y;
-			for( auto ele : x ) {
-				vertex v;
-				v.id = ele;
-				v.graph_ptr = this;
-				inc(ele);
+			for (auto ele : x) {
+				vertex v(ele, this);
 				y.push_back(v);
 			}
 			return std::vector<vertex>(y.begin(), y.end());
@@ -312,10 +309,7 @@ public:
 	std::vector<vertex> get_inputs() {
 		std::vector<vertex> ins;
 		for (auto i : inputs) {
-			vertex v;
-			v.id = i;
-			v.graph_ptr = this;
-			inc(i);
+			vertex v(i, this);
 			ins.push_back(v);
 		}
 		return ins;
@@ -323,10 +317,7 @@ public:
 	std::set<vertex> get_outputs() {
 		std::set<vertex> outs;
 		for (auto o : outputs) {
-			vertex v;
-			v.id = o;
-			v.graph_ptr = this;
-			inc(o);
+			vertex v(o, this);
 			outs.insert(v);
 		}
 		return outs;
@@ -361,12 +352,10 @@ public:
 	}
 };
 
-
-
-class math_dag : public dag<math_props> {
+class math_dag: public dag<math_props> {
 public:
 	vertex make_vertex(vertex_type type) {
-		vertex rc = dag<math_props>::make_vertex(type==IN);
+		vertex rc = dag<math_props>::make_vertex(type == IN);
 		set_type(rc, type);
 		return rc;
 	}
@@ -397,8 +386,6 @@ public:
 	}
 };
 
-
-
 class dag_node {
 	using vertex = dag<math_props>::vertex;
 	vertex id;
@@ -414,8 +401,8 @@ public:
 		const_map.clear();
 		graph = std::make_shared<math_dag>();
 	}
-	dag_node(vertex v) {
-		id = v;
+	dag_node(vertex v) :
+			id(v) {
 	}
 
 	bool operator<(const dag_node& other) {
