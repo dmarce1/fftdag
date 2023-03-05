@@ -94,6 +94,7 @@ struct set_key {
 };
 
 std::set<int> intersection(const std::set<int>& A, const std::set<int>& B);
+std::set<int> antiset(const std::set<int>& A);
 
 struct math_props {
 	vertex_type type;
@@ -118,7 +119,6 @@ class dag {
 	int next_id;
 	std::unordered_map<int, dag_entry> map;
 	std::unordered_map<int, std::set<int>> edge_map;
-	std::unordered_map<int, dag_entry> backup_map;
 	std::set<int> inputs;
 	std::set<int> outputs;
 	void inc(int i) {
@@ -153,6 +153,7 @@ public:
 			}
 		}
 	public:
+		friend class vertex_key;
 		vertex() {
 			vtx = -1;
 			graph_ptr = nullptr;
@@ -212,6 +213,12 @@ public:
 			return vtx == other.vtx;
 		}
 	};
+	struct vertex_key {
+		size_t operator()(const vertex& v) const {
+			std::hash<int> hash;
+			return hash(v.vtx);
+		}
+	};
 	friend class vertex;
 	~dag() {
 		std::vector<int> vs;
@@ -233,14 +240,32 @@ public:
 			}
 		}
 	}
+	size_t size() const {
+		return edge_map.size();
+	}
 	dag() {
 		next_id = 1;
 	}
-	void backup() {
-		backup_map = map;
-	}
-	void restore() {
-		map = std::move(backup_map);
+	void swap(vertex u, vertex v) {
+		auto eiu = get_edges_in(u);
+		for (auto e : eiu) {
+			assert(e != u);
+			assert(e != v);
+			remove_edge(e, u);
+		}
+		auto eiv = get_edges_in(v);
+		for (auto e : eiv) {
+			assert(e != u);
+			assert(e != v);
+			remove_edge(e, v);
+			add_edge(e, u);
+		}
+		for (auto e : eiu) {
+			assert(e != u);
+			assert(e != v);
+			add_edge(e, v);
+		}
+		std::swap(map[u].props, map[v].props);
 	}
 	vertex make_vertex(bool in) {
 		vertex rc(next_id++, this);
@@ -269,24 +294,27 @@ public:
 		assert(map[to].in.find(from) != map[to].in.end());
 		map[from].out.erase(to);
 		edge_map[from].erase(to);
+		if (edge_map[from].size() == 0) {
+			edge_map.erase(from);
+		}
 		map[to].in.erase(from);
 		dec(from);
 	}
-	std::vector<vertex> get_edges_in(vertex v) {
+	std::set<vertex> get_edges_in(vertex v) {
 		assert(map.find(v) != map.end());
-		std::vector<vertex> edges;
+		std::set<vertex> edges;
 		for (auto e : map[v].in) {
 			vertex v(e, this);
-			edges.push_back(v);
+			edges.insert(v);
 		}
 		return edges;
 	}
-	std::vector<vertex> get_edges_out(vertex v) {
+	std::set<vertex> get_edges_out(vertex v) {
 		assert(map.find(v) != map.end());
-		std::vector<vertex> edges;
+		std::set<vertex> edges;
 		for (auto e : map[v].out) {
 			vertex v(e, this);
-			edges.push_back(v);
+			edges.insert(v);
 		}
 		return edges;
 	}
@@ -350,6 +378,12 @@ public:
 	Properties& props(vertex v) {
 		return map[v].props;
 	}
+	Properties& operator[](vertex v) {
+		return map[v].props;
+	}
+	const Properties& operator[](vertex v) const {
+		return map[v].props;
+	}
 };
 
 class math_dag: public dag<math_props> {
@@ -365,7 +399,7 @@ public:
 	std::string get_name(vertex v) {
 		return props(v).name;
 	}
-	std::vector<std::string> get_names(std::vector<vertex> vs) {
+	std::vector<std::string> get_names(std::set<vertex> vs) {
 		std::vector<std::string> rc;
 		for (auto v : vs) {
 			rc.push_back(props(v).name);
@@ -412,11 +446,50 @@ public:
 		return id == other.id;
 	}
 	static void optimize_adds() {
-		auto all = collect_all_adds();
-		for (auto a : all) {
+		auto& g = *graph;
+		std::unordered_map<vertex, adds_t, dag<math_props>::vertex_key> targets;
+		std::unordered_map<vertex, adds_t, dag<math_props>::vertex_key> database;
+		auto list = g.sort();
+		for (auto n : list) {
+			if (is_additive(g[n].type)) {
+				auto eout = g.get_edges_out(n);
+				bool terminal = false;
+				if (eout.size()) {
+					for (auto e : eout) {
+						if (!is_additive(g[e].type)) {
+							terminal = true;
+						}
+					}
+				} else {
+					terminal = true;
+				}
+				if (terminal) {
+					targets[n] = database[n] = collect_adds(n);
+				}
+			} else {
+				adds_t adds;
+				adds.pos.insert(n);
+				database[n] = std::move(adds);
+			}
+		}
+		for (auto add : targets) {
+			fprintf( stderr, "%i = ", (int) add.first);
+			for (auto p : add.second.pos) {
+				fprintf(stderr, "+ %i ", (int) p);
+			}
+			for (auto n : add.second.neg) {
+				fprintf(stderr, "- %i ", (int) n);
+			}
 			fprintf( stderr, "\n");
-			for (auto b : a) {
-				fprintf( stderr, "%i\n", (int) b);
+		}
+		for( auto i : targets) {
+			for( auto j : targets) {
+				if( i.first != j.first ) {
+			//		auto ipos = intersection(i.second.pos, j.second.pos);
+			//		auto ineg = intersection(i.second.neg, j.second.neg);
+				//	int itot = ipos.size() + ineg.size();
+				//	fprintf( stderr, "%i\n", itot);
+				}
 			}
 		}
 	}
@@ -463,7 +536,7 @@ public:
 	}
 	dag_node neg_in() {
 		dag_node in;
-		in.id = graph->get_edges_in(id)[0];
+		in.id = *(graph->get_edges_in(id).begin());
 		return in;
 	}
 	static std::vector<add_type> collect_mults(vertex v) {
@@ -483,7 +556,11 @@ public:
 			}
 		} else {
 			add_type add;
-			auto edges = graph->get_edges_in(v);
+			auto edgess = graph->get_edges_in(v);
+			std::vector<vertex> edges;
+			for (auto e : edgess) {
+				edges.push_back(e);
+			}
 			if (graph->get_type(v) == MUL) {
 				if (graph->get_type(edges[0]) == CON) {
 					add.v = edges[1];
@@ -506,40 +583,26 @@ public:
 		}
 		return rc;
 	}
-	static std::vector<int> collect_adds(vertex v) {
-		std::vector<int> rc;
+	struct adds_t {
+		std::set<vertex> pos;
+		std::set<vertex> neg;
+	};
+	static adds_t collect_adds(vertex v) {
+		adds_t rc;
 		if (is_additive(graph->get_type(v))) {
 			int i = 0;
 			auto edges_in = graph->get_edges_in(v);
 			for (auto e : edges_in) {
 				auto tmp = collect_adds(e);
 				if ((i == 0 && graph->get_type(v) == NSUB) || (i == 1 && graph->get_type(v) == SUB)) {
-					for (auto& t : tmp) {
-						t = -t;
-					}
+					std::swap(tmp.pos, tmp.neg);
 				}
-				rc.insert(rc.end(), tmp.begin(), tmp.end());
+				rc.pos.insert(tmp.pos.begin(), tmp.pos.end());
+				rc.neg.insert(tmp.neg.begin(), tmp.neg.end());
 				i++;
 			}
 		} else {
-			rc.push_back(v);
-		}
-		return rc;
-	}
-	static std::vector<std::vector<int>> collect_all_adds() {
-		std::vector<std::vector<int>> rc;
-		auto nodes = graph->sort();
-		for (auto n : nodes) {
-			auto type = graph->get_type(n);
-			if (!is_additive(type)) {
-				auto edges_out = graph->get_edges_out(n);
-				for (auto edge : edges_out) {
-					auto this_type = graph->get_type(edge);
-					if (is_additive(this_type)) {
-						rc.push_back(collect_adds(edge));
-					}
-				}
-			}
+			rc.pos.insert(v);
 		}
 		return rc;
 	}
@@ -584,17 +647,18 @@ public:
 			main_sum = main_sum + sum;
 		}
 		sum = main_sum;
-		auto ei = graph->get_edges_in(nd.id);
-		for (auto e : ei) {
-			graph->remove_edge(e, nd.id);
-		}
-		ei = graph->get_edges_in(sum.id);
-		for (auto e : ei) {
-			graph->remove_edge(e, sum.id);
-			graph->add_edge(e, nd.id);
-		}
-		graph->set_type(nd.id, graph->get_type(sum.id));
-		graph->set_value(nd.id, graph->get_value(sum.id));
+		/*		auto ei = graph->get_edges_in(nd.id);
+		 for (auto e : ei) {
+		 graph->remove_edge(e, nd.id);
+		 }
+		 ei = graph->get_edges_in(sum.id);
+		 for (auto e : ei) {
+		 graph->remove_edge(e, sum.id);
+		 graph->add_edge(e, nd.id);
+		 }
+		 graph->set_type(nd.id, graph->get_type(sum.id));
+		 graph->set_value(nd.id, graph->get_value(sum.id));*/
+		graph->swap(nd.id, sum.id);
 		return nd;
 	}
 
@@ -623,8 +687,11 @@ public:
 		dag_node B;
 		auto type = graph->get_type(node.id);
 		if (is_arithmetic(type)) {
-			A.id = edges.front();
-			B.id = edges.back();
+			auto i = edges.begin();
+			A.id = *i++;
+			if (edges.size() > 1) {
+				B.id = *i++;
+			}
 			switch (type) {
 			case ADD:
 				if (A.zero() && B.zero()) {

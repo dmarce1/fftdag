@@ -12,3 +12,12 @@ std::set<int> intersection(const std::set<int>& A, const std::set<int>& B) {
 	}
 	return C;
 }
+
+
+std::set<int> antiset(const std::set<int>& A) {
+	std::set<int> B;
+	for( auto a : A ) {
+		B.insert(-a);
+	}
+	return B;
+}
