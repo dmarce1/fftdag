@@ -21,10 +21,6 @@ std::vector<std::vector<int>> nchoosek(int n, int k) {
 	} else {
 		for (int q = 0; q < N - 1; q++) {
 			rc.push_back(combo);
-			for (int i = 0; i < combo.size(); i++) {
-				printf("%i ", combo[i]);
-			}
-			printf("\n");
 			int dim = k - 1;
 			while (combo[dim] == n - 1) {
 				dim--;

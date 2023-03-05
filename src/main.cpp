@@ -115,14 +115,14 @@ void print_code2(int N) {
 }
 
 int test() {
-	constexpr int N = 8;
+	constexpr int N = 3;
 	srand(time(NULL));
 	auto inputs = dag_node::create_inputs(2 * N);
-	auto outputs = fft_prime_power(2, inputs, N);
+	auto outputs = fft_prime_power(3, inputs, N);
 	dag_node::set_outputs(outputs);
 	dag_node::optimize();
 	dag_node::optimize_adds();
-//dag_node::print_list();
+	//dag_node::print_list();
 	print_code1(N);
 	dag_node::print_code();
 	print_code2(N);

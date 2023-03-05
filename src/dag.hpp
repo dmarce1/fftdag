@@ -498,7 +498,7 @@ public:
 			int sgn;
 		};
 		int N = targets.size();
-		for (auto add : targets) {
+/*		for (auto add : targets) {
 			fprintf( stderr, "%i = ", (int) add.first);
 			for (auto p : add.second.pos) {
 				fprintf(stderr, "+ %i ", (int) p);
@@ -507,8 +507,8 @@ public:
 				fprintf(stderr, "- %i ", (int) n);
 			}
 			fprintf( stderr, "\n");
-		}
-		for (int k = N; k >= 2; k--) {
+		}*/
+		for (int k = 4; k >= 2; k--) {
 			int best_score;
 			do {
 				best_score = 0;
@@ -586,13 +586,25 @@ public:
 							target.neg.insert(sum.id);
 						}
 					}
-					fprintf( stderr, "%i %i %i/ %i\n", N, k, best_score, intersections.size());
+					/*fprintf( stderr, "%i %i %i/ %i\n", N, k, best_score, intersections.size());
 					for (int l = 0; l < intersections.size(); l++) {
 						fprintf( stderr, " %c%i ", intersections[l].sgn > 0 ? '+' : '-', (int) intersections[l].v);
 					}
-					fprintf( stderr, "\n");
+					fprintf( stderr, "\n");*/
 				}
 			} while (best_score >= 2);
+		}
+		for (auto target : targets) {
+			dag_node sum(0.0);
+			for (auto term : target.second.pos) {
+				sum = sum + term;
+			}
+			for (auto term : target.second.neg) {
+				sum = sum - term;
+			}
+			auto props = g[target.first];
+			g.swap(target.first, sum.id);
+			g[target.first].name = props.name;
 		}
 	}
 	static vertex find_vertex(vertex_type type, std::vector<vertex> ins) {
@@ -749,18 +761,9 @@ public:
 			main_sum = main_sum + sum;
 		}
 		sum = main_sum;
-		/*		auto ei = graph->get_edges_in(nd.id);
-		 for (auto e : ei) {
-		 graph->remove_edge(e, nd.id);
-		 }
-		 ei = graph->get_edges_in(sum.id);
-		 for (auto e : ei) {
-		 graph->remove_edge(e, sum.id);
-		 graph->add_edge(e, nd.id);
-		 }
-		 graph->set_type(nd.id, graph->get_type(sum.id));
-		 graph->set_value(nd.id, graph->get_value(sum.id));*/
+		auto props = (*graph)[nd.id];
 		graph->swap(nd.id, sum.id);
+		(*graph)[nd.id].name = props.name;
 		return nd;
 	}
 
@@ -1069,6 +1072,7 @@ public:
 				std::string nm;
 				if (outputs.find(n) != outputs.end()) {
 					nm = graph->get_name(n);
+					assert(nm != "");
 					if (free_vars.find(nm) == free_vars.end()) {
 						assert(used_vars.find(nm) != used_vars.end());
 						auto other = used_vars[nm];
