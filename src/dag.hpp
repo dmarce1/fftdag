@@ -489,6 +489,15 @@ public:
 				database[n] = std::move(adds);
 			}
 		}
+		std::vector<vertex> targ_vec;
+		for (auto i : targets) {
+			targ_vec.push_back(i.first);
+		}
+		struct intersection_t {
+			vertex v;
+			int sgn;
+		};
+		int N = targets.size();
 		for (auto add : targets) {
 			fprintf( stderr, "%i = ", (int) add.first);
 			for (auto p : add.second.pos) {
@@ -499,15 +508,6 @@ public:
 			}
 			fprintf( stderr, "\n");
 		}
-		std::vector<vertex> targ_vec;
-		for (auto i : targets) {
-			targ_vec.push_back(i.first);
-		}
-		struct intersection_t {
-			vertex v;
-			int sgn;
-		};
-		int N = targets.size();
 		for (int k = N; k >= 2; k--) {
 			int best_score;
 			do {
@@ -515,11 +515,14 @@ public:
 				std::vector<intersection_t> intersections;
 				const auto combos = nchoosek(N, k);
 				int itot;
-				fprintf( stderr, "combos.size() = %i\n", combos.size());
 				std::vector<intersection_t> best_intersections;
 				adds_t adds;
 				adds_t best_adds;
 				for (const auto& combo : combos) {
+					intersections.resize(0);
+					adds.pos.clear();
+					adds.neg.clear();
+					itot = 0;
 					for (auto i : combo) {
 						auto I = targ_vec[i];
 						std::set<vertex> padds, nadds;
@@ -535,8 +538,8 @@ public:
 							nadds1.insert(targets[I].pos.begin(), targets[I].pos.end());
 							padds1.insert(targets[I].neg.begin(), targets[I].neg.end());
 						} else {
-							nadds1 = intersection(adds.pos, targets[I].pos);
-							padds1 = intersection(adds.neg, targets[I].neg);
+							nadds1 = intersection(adds.neg, targets[I].pos);
+							padds1 = intersection(adds.pos, targets[I].neg);
 						}
 						intersection_t entry;
 						entry.v = I;
@@ -547,8 +550,8 @@ public:
 						} else {
 							entry.sgn = +1;
 						}
-						adds.pos = std::move(padds1);
-						adds.neg = std::move(nadds1);
+						adds.pos = std::move(padds);
+						adds.neg = std::move(nadds);
 						itot = adds.pos.size() + adds.neg.size();
 						if (itot <= 1) {
 							break;
@@ -583,7 +586,11 @@ public:
 							target.neg.insert(sum.id);
 						}
 					}
-					fprintf( stderr, "%i %i %i\n", N, k, best_score);
+					fprintf( stderr, "%i %i %i/ %i\n", N, k, best_score, intersections.size());
+					for (int l = 0; l < intersections.size(); l++) {
+						fprintf( stderr, " %c%i ", intersections[l].sgn > 0 ? '+' : '-', (int) intersections[l].v);
+					}
+					fprintf( stderr, "\n");
 				}
 			} while (best_score >= 2);
 		}
