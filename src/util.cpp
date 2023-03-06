@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-size_t factorial(size_t k) {
+__int128 factorial(__int128 k) {
 	if (k <= 1) {
 		return 1;
 	} else {
@@ -13,27 +13,28 @@ size_t factorial(size_t k) {
 
 std::vector<std::vector<int>> nchoosek(int n, int k) {
 	std::vector<std::vector<int>> rc;
-	const int N = factorial(n) / factorial(n - k) / factorial(k);
 	std::vector<int> combo(k);
 	std::iota(combo.begin(), combo.end(), 0);
 	if (n == k) {
 		rc.push_back(combo);
 	} else {
-		for (int q = 0; q < N - 1; q++) {
+		bool done = false;
+		while (!done) {
 			rc.push_back(combo);
 			int dim = k - 1;
-			while (combo[dim] == n - 1) {
+			while (combo[dim] == dim + n - k) {
 				dim--;
+				if (dim < 0) {
+					done = true;
+					break;
+				}
 			}
-			REDO: combo[dim]++;
-			for (int i = dim + 1; i < combo.size(); i++) {
-				combo[i] = combo[i - 1] + 1;
+			if (!done) {
+				combo[dim]++;
+				for (int i = dim + 1; i < k; i++) {
+					combo[i] = combo[i - 1] + 1;
+				}
 			}
-			if (combo.back() >= n) {
-				dim--;
-				goto REDO;
-			}
-
 		}
 	}
 	rc.push_back(combo);

@@ -83,36 +83,6 @@ struct opcnt_t {
 	int tot;
 };
 
-struct set_key {
-	size_t operator()(const std::set<int>& s) const {
-		int key = 1234;
-		for (auto i : s) {
-			key += 42;
-			key *= (1234 + i);
-		}
-		return key;
-	}
-};
-
-template<class T>
-std::set<T> intersection(const std::set<T>& A, const std::set<T>& B) {
-	std::set<T> C;
-	for (auto b : B) {
-		if (A.find(b) != A.end()) {
-			C.insert(b);
-		}
-	}
-	return C;
-}
-
-template<class T>
-std::set<T> operator-(std::set<T> A, const std::set<T>& B) {
-	for (auto b : B) {
-		A.erase(b);
-	}
-	return A;
-}
-
 struct math_props {
 	vertex_type type;
 	std::string name;
@@ -498,7 +468,7 @@ public:
 			int sgn;
 		};
 		int N = targets.size();
-/*		for (auto add : targets) {
+		for (auto add : targets) {
 			fprintf( stderr, "%i = ", (int) add.first);
 			for (auto p : add.second.pos) {
 				fprintf(stderr, "+ %i ", (int) p);
@@ -507,93 +477,122 @@ public:
 				fprintf(stderr, "- %i ", (int) n);
 			}
 			fprintf( stderr, "\n");
-		}*/
-		for (int k = 4; k >= 2; k--) {
-			int best_score;
-			do {
-				best_score = 0;
-				std::vector<intersection_t> intersections;
-				const auto combos = nchoosek(N, k);
-				int itot;
-				std::vector<intersection_t> best_intersections;
-				adds_t adds;
-				adds_t best_adds;
-				for (const auto& combo : combos) {
-					intersections.resize(0);
-					adds.pos.clear();
-					adds.neg.clear();
-					itot = 0;
-					for (auto i : combo) {
-						auto I = targ_vec[i];
-						std::set<vertex> padds, nadds;
-						std::set<vertex> padds1, nadds1;
-						if (adds.pos.size() + adds.neg.size() == 0) {
-							padds.insert(targets[I].pos.begin(), targets[I].pos.end());
-							nadds.insert(targets[I].neg.begin(), targets[I].neg.end());
-						} else {
-							padds = intersection(adds.pos, targets[I].pos);
-							nadds = intersection(adds.neg, targets[I].neg);
-						}
-						if (adds.pos.size() + adds.neg.size() == 0) {
-							nadds1.insert(targets[I].pos.begin(), targets[I].pos.end());
-							padds1.insert(targets[I].neg.begin(), targets[I].neg.end());
-						} else {
-							nadds1 = intersection(adds.neg, targets[I].pos);
-							padds1 = intersection(adds.pos, targets[I].neg);
-						}
-						intersection_t entry;
-						entry.v = I;
-						if (padds.size() + nadds.size() < padds1.size() + nadds1.size()) {
-							std::swap(padds, padds1);
-							std::swap(nadds, nadds1);
-							entry.sgn = -1;
-						} else {
-							entry.sgn = +1;
-						}
-						adds.pos = std::move(padds);
-						adds.neg = std::move(nadds);
-						itot = adds.pos.size() + adds.neg.size();
-						if (itot <= 1) {
-							break;
-						}
-						intersections.push_back(entry);
-					}
-					if (itot > best_score) {
-						best_score = itot;
-						best_adds = std::move(adds);
-						best_intersections = std::move(intersections);
-					}
-				}
-				if (best_score >= 2) {
-					intersections = std::move(best_intersections);
-					adds = std::move(best_adds);
-					dag_node sum = dag_node(0.0);
-					for (auto p : adds.pos) {
-						sum = sum + dag_node(p);
-					}
-					for (auto n : adds.neg) {
-						sum = sum - dag_node(n);
-					}
-					for (auto i : intersections) {
-						auto& target = targets[i.v];
-						if (i.sgn > 0) {
-							target.pos = target.pos - adds.pos;
-							target.neg = target.neg - adds.neg;
-							target.pos.insert(sum.id);
-						} else {
-							target.pos = target.pos - adds.neg;
-							target.neg = target.neg - adds.pos;
-							target.neg.insert(sum.id);
-						}
-					}
-					/*fprintf( stderr, "%i %i %i/ %i\n", N, k, best_score, intersections.size());
-					for (int l = 0; l < intersections.size(); l++) {
-						fprintf( stderr, " %c%i ", intersections[l].sgn > 0 ? '+' : '-', (int) intersections[l].v);
-					}
-					fprintf( stderr, "\n");*/
-				}
-			} while (best_score >= 2);
 		}
+		std::vector<std::set<int>> sets;
+		std::vector<adds_t> target_vec;
+		for (auto u : targets) {
+			target_vec.push_back(u.second);
+		}
+		for (int i = 0; i < targets.size(); i++) {
+			std::set<int> set(target_vec[i].pos.begin(), target_vec[i].pos.end());
+			std::vector<int> negs(target_vec[i].neg.begin(), target_vec[i].neg.end());
+			for (auto n : negs) {
+				set.insert(-n);
+			}
+			sets.push_back(set);
+		}
+		auto sz = sets.size();
+		for (int i = 0; i < sz; i++) {
+			std::set<int> set;
+			for (auto j = sets[i].begin(); j != sets[i].end(); j++) {
+				set.insert(-*j);
+			}
+			sets.push_back(set);
+		}
+		auto inters = find_all_intersections<int, std::hash<int>>(sets);
+		for (auto i : inters) {
+			if (i.first.size() > 1) {
+				for (auto j = i.first.begin(); j != i.first.end(); j++) {
+					fprintf( stderr, "%i ", *j);
+				}
+				fprintf(stderr, "\n");
+				for (auto j = i.second.begin(); j != i.second.end(); j++) {
+					fprintf( stderr, "%i ", *j);
+				}
+				fprintf(stderr, "\n\n");
+			}
+		}
+		/*for (int k = 8; k >= 2; k--) {
+		 int best_score;
+		 do {
+		 best_score = 0;
+		 std::vector<intersection_t> intersections;
+		 const auto combos = nchoosek(N, k);
+		 int itot;
+		 std::vector<intersection_t> best_intersections;
+		 adds_t adds;
+		 adds_t best_adds;
+		 for (const auto& combo : combos) {
+		 intersections.resize(0);
+		 adds.pos.clear();
+		 adds.neg.clear();
+		 itot = 0;
+		 for (auto i : combo) {
+		 auto I = targ_vec[i];
+		 std::set<vertex> padds, nadds;
+		 std::set<vertex> padds1, nadds1;
+		 if (adds.pos.size() + adds.neg.size() == 0) {
+		 padds.insert(targets[I].pos.begin(), targets[I].pos.end());
+		 nadds.insert(targets[I].neg.begin(), targets[I].neg.end());
+		 } else {
+		 padds = intersection(adds.pos, targets[I].pos);
+		 nadds = intersection(adds.neg, targets[I].neg);
+		 }
+		 if (adds.pos.size() + adds.neg.size() == 0) {
+		 nadds1.insert(targets[I].pos.begin(), targets[I].pos.end());
+		 padds1.insert(targets[I].neg.begin(), targets[I].neg.end());
+		 } else {
+		 nadds1 = intersection(adds.neg, targets[I].pos);
+		 padds1 = intersection(adds.pos, targets[I].neg);
+		 }
+		 intersection_t entry;
+		 entry.v = I;
+		 if (padds.size() + nadds.size() < padds1.size() + nadds1.size()) {
+		 std::swap(padds, padds1);
+		 std::swap(nadds, nadds1);
+		 entry.sgn = -1;
+		 } else {
+		 entry.sgn = +1;
+		 }
+		 adds.pos = std::move(padds);
+		 adds.neg = std::move(nadds);
+		 itot = adds.pos.size() + adds.neg.size();
+		 if (itot <= 1) {
+		 break;
+		 }
+		 intersections.push_back(entry);
+		 }
+		 if (itot > best_score) {
+		 best_score = itot;
+		 best_adds = std::move(adds);
+		 best_intersections = std::move(intersections);
+		 }
+		 }
+		 if (best_score >= 2) {
+		 intersections = std::move(best_intersections);
+		 adds = std::move(best_adds);
+		 dag_node sum = dag_node(0.0);
+		 for (auto p : adds.pos) {
+		 sum = sum + dag_node(p);
+		 }
+		 for (auto n : adds.neg) {
+		 sum = sum - dag_node(n);
+		 }
+		 for (auto i : intersections) {
+		 auto& target = targets[i.v];
+		 if (i.sgn > 0) {
+		 target.pos = target.pos - adds.pos;
+		 target.neg = target.neg - adds.neg;
+		 target.pos.insert(sum.id);
+		 } else {
+		 target.pos = target.pos - adds.neg;
+		 target.neg = target.neg - adds.pos;
+		 target.neg.insert(sum.id);
+		 }
+		 }
+		 }
+		 } while (best_score >= 2);
+		 }*/
 		for (auto target : targets) {
 			dag_node sum(0.0);
 			for (auto term : target.second.pos) {
@@ -1182,5 +1181,7 @@ public:
 ;
 
 std::vector<dag_node> fft_prime_power(int R, std::vector<dag_node> xin, int N);
+std::vector<dag_node> fft_radix4(std::vector<dag_node> xin, int N);
+std::vector<dag_node> fft_radix2(std::vector<dag_node> xin, int N);
 
 #endif /* FFTDAG_HPP_ */
