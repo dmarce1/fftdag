@@ -18,7 +18,7 @@ std::vector<std::vector<int>> nchoosek(int n, int k);
 template<class T>
 std::set<T> intersection(const std::set<T>& A, const std::set<T>& B) {
 	std::set<T> C;
-	if (B.size() <= A.size()) {
+	if (B.size() >= A.size()) {
 		for (auto b : B) {
 			if (A.find(b) != A.end()) {
 				C.insert(b);
@@ -31,9 +31,9 @@ std::set<T> intersection(const std::set<T>& A, const std::set<T>& B) {
 }
 
 template<class T, class F>
-struct set_key {
-	size_t operator()(const std::set<T>& set) const {
-		F hash;
+struct vector_key {
+	size_t operator()(const std::vector<T>& set) const {
+		std::hash<int> hash;
 		size_t key = 1;
 		for (auto i = set.begin(); i != set.end(); i++) {
 			int bit = key & 1;
@@ -94,39 +94,90 @@ std::set<T> operator-(std::set<T> A, const std::set<T>& B) {
 }
 
 template<class T, class F>
-using allint_t = std::unordered_map<std::set<int>, std::set<T>, set_key<T, F>>;
+struct allint_t {
+	std::unordered_map<std::vector<int>, std::set<T>, vector_key<int, F>> map;
+	std::unordered_map<std::set<T>, std::vector<int>, F> invmap;
+};
 
 template<class T, class F>
 allint_t<T, F> find_all_intersections(const std::vector<std::set<T>>& sets) {
 	allint_t<T, F> rc;
-	const std::function<void(std::set<int> past, std::set<int> future, std::set<T> inter)> find = [&find, &rc, &sets](std::set<int> past, std::set<int> future, std::set<T> inter) {
-		rc[past] = inter;
-			for( auto i = future.begin(); i != future.end(); i++) {
-			auto next_future = future;
-			auto next_past = past;
-			next_future.erase(*i);
-			next_past.insert(*i);
-			auto next_inter = intersection(inter, sets[*i]);
+	std::vector<int> indices;
+
+	const std::function<void(int, std::set<T>)> find = [&find, &rc, &sets, &indices](int start, std::set<T> inter) {
+		if( start == sets.size() || indices.size() > sets.size()) {
+			return;
+		}
+		for( int i = start; i < sets.size(); i++) {
+	/*		fprintf( stderr, "%3i: ", inter.size());
+			for( int k = 0; k < indices.size(); k++) {
+				fprintf( stderr, "%3i ", indices[k]);
+			}
+			fprintf( stderr, "\n");*/
+			auto next_inter = intersection(inter, sets[i]);
 			if( next_inter.size() > 1 ) {
-				find(std::move(next_past), std::move(next_future), std::move(next_inter));
+				indices.push_back(i);
+				auto iter = rc.invmap.find(next_inter);
+				bool flag = true;
+				if( iter != rc.invmap.end()) {
+					if( iter->second.size() < indices.size()) {
+						rc.map.erase(iter->second);
+					} else {
+						flag = false;
+					}
+				}
+				if( flag ) {
+					rc.invmap[next_inter] = indices;
+					rc.map[indices] = next_inter;
+				}
+				find(i + 1, std::move(next_inter));
+				indices.pop_back();
 			}
 		}
 	};
-	std::set<int> future;
-	for (int i = 0; i < sets.size(); i++) {
-		future.insert(i);
-	}
-	for (auto i = future.begin(); i != future.end(); i++) {
-		auto next_future = future;
-		std::set<int> next_past;
-		next_future.erase(*i);
-		next_past.insert(*i);
-		auto inter = sets[*i];
-		if (inter.size() > 1) {
-			find(std::move(next_past), std::move(next_future), std::move(inter));
-		}
+	for (int i = 0; i < sets.size() / 2; i++) {
+		indices.push_back(i);
+		find(i + 1, sets[i]);
+		indices.pop_back();
 	}
 	return rc;
 }
+
+/*
+ template<class T, class F>
+ allint_t<T, F> find_all_intersections(const std::vector<std::set<T>>& sets) {
+ allint_t<T, F> rc;
+ const std::function<void(std::set<int> past, std::set<int> future, std::set<T> inter)> find = [&find, &rc, &sets](std::set<int> past, std::set<int> future, std::set<T> inter) {
+ if( rc.find(past) != rc.end()) {
+ return;
+ }
+ rc[past] = inter;
+ for( auto i = future.begin(); i != future.end(); i++) {
+ auto next_future = future;
+ auto next_past = past;
+ next_future.erase(*i);
+ next_past.insert(*i);
+ auto next_inter = intersection(inter, sets[*i]);
+ if( next_inter.size() > 1 ) {
+ find(std::move(next_past), std::move(next_future), std::move(next_inter));
+ }
+ }
+ };
+ std::set<int> future;
+ for (int i = 0; i < sets.size(); i++) {
+ future.insert(i);
+ }
+ for (auto i = future.begin(); i != future.end(); i++) {
+ auto next_future = future;
+ std::set<int> next_past;
+ next_future.erase(*i);
+ next_past.insert(*i);
+ auto inter = sets[*i];
+ if (inter.size() > 1) {
+ find(std::move(next_past), std::move(next_future), std::move(inter));
+ }
+ }
+ return rc;
+ }*/
 
 #endif /* UTIL_HPP_ */

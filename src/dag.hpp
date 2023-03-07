@@ -81,6 +81,7 @@ struct opcnt_t {
 	int mul;
 	int neg;
 	int tot;
+	int sz;
 };
 
 struct math_props {
@@ -125,6 +126,7 @@ class dag {
 			inputs.erase(j);
 			outputs.erase(j);
 			map.erase(j);
+			edge_map.erase(j);
 		}
 	}
 public:
@@ -432,10 +434,27 @@ public:
 	bool operator==(const dag_node& other) {
 		return id == other.id;
 	}
+	struct set_key {
+		size_t operator()(const std::set<int>& set) const {
+			std::hash<int> hash;
+			size_t key = 1;
+			for (auto i = set.begin(); i != set.end(); i++) {
+				int bit = key & 1;
+				key = *i ^ (key << 1);
+				if (bit) {
+					key ^= 1;
+				}
+			}
+			return key;
+		}
+	};
+	struct intersection_t {
+		vertex v;
+		int sgn;
+	};
 	static void optimize_adds() {
 		auto& g = *graph;
 		std::unordered_map<vertex, adds_t, dag<math_props>::vertex_key> targets;
-		std::unordered_map<vertex, adds_t, dag<math_props>::vertex_key> database;
 		auto list = g.sort();
 		for (auto n : list) {
 			if (is_additive(g[n].type)) {
@@ -451,22 +470,11 @@ public:
 					terminal = true;
 				}
 				if (terminal) {
-					targets[n] = database[n] = collect_adds(n);
+					targets[n] = collect_adds(n);
 				}
-			} else {
-				adds_t adds;
-				adds.pos.insert(n);
-				database[n] = std::move(adds);
 			}
 		}
-		std::vector<vertex> targ_vec;
-		for (auto i : targets) {
-			targ_vec.push_back(i.first);
-		}
-		struct intersection_t {
-			vertex v;
-			int sgn;
-		};
+
 		int N = targets.size();
 		for (auto add : targets) {
 			fprintf( stderr, "%i = ", (int) add.first);
@@ -499,110 +507,116 @@ public:
 			}
 			sets.push_back(set);
 		}
-		auto inters = find_all_intersections<int, std::hash<int>>(sets);
-		for (auto i : inters) {
-			if (i.first.size() > 1) {
-				for (auto j = i.first.begin(); j != i.first.end(); j++) {
-					fprintf( stderr, "%i ", *j);
+		auto inters = find_all_intersections<int, set_key>(sets);
+
+		std::unordered_map<vertex, adds_t, dag<math_props>::vertex_key> pieces;
+		std::unordered_set<vertex, dag<math_props>::vertex_key> used_pieces;
+		for (auto i : inters.map) {
+			adds_t add;
+			dag_node sum(0.0);
+			for (auto j : i.second) {
+				if (j > 0) {
+					auto v = vertex(j, &(*graph));
+					add.pos.insert(v);
+					sum = sum + dag_node(v);
+				} else {
+					auto v = vertex(-j, &(*graph));
+					add.neg.insert(v);
+					sum = sum - dag_node(v);
 				}
-				fprintf(stderr, "\n");
-				for (auto j = i.second.begin(); j != i.second.end(); j++) {
-					fprintf( stderr, "%i ", *j);
+			}
+			pieces[sum.id] = std::move(add);
+		}
+
+		const auto check_insert = [&targets](const adds_t& target, const adds_t& piece) {
+			int pscore = 0;
+			int nscore = 0;
+			auto pinter = intersection(target.pos, piece.pos).size();
+			auto ninter = intersection(target.neg, piece.neg).size();
+			if( ninter == piece.neg.size() && pinter == piece.pos.size() && ninter + pinter >=2) {
+				pscore = ninter + pinter;
+			}
+			pinter = intersection(target.pos, piece.neg).size();
+			ninter = intersection(target.neg, piece.pos).size();
+			if( ninter == piece.pos.size() && pinter == piece.neg.size() && ninter + pinter >=2) {
+				nscore = ninter + pinter;
+			}
+			return std::max(pscore, nscore);
+		};
+		const auto do_insert = [](adds_t& target, const adds_t& piece) {
+			auto pinter = intersection(target.pos, piece.pos).size();
+			auto ninter = intersection(target.neg, piece.neg).size();
+			if( ninter == piece.neg.size() && pinter == piece.pos.size() && ninter + pinter >=2) {
+				target.pos = target.pos - piece.pos;
+				target.neg = target.neg - piece.neg;
+				return true;
+			} else {
+				pinter = intersection(target.pos, piece.neg).size();
+				ninter = intersection(target.neg, piece.pos).size();
+				if( ninter == piece.pos.size() && pinter == piece.neg.size() && ninter + pinter >=2) {
+					target.pos = target.pos - piece.neg;
+					target.neg = target.neg - piece.pos;
+					return true;
 				}
-				fprintf(stderr, "\n\n");
+			}
+			return false;
+		};
+		int best_score;
+		std::unordered_map<vertex, dag_node, dag<math_props>::vertex_key> sums;
+		for (const auto& t : targets) {
+			sums[t.first] = dag_node(0.0);
+		}
+		do {
+			best_score = 0;
+			adds_t best_piece, piece;
+			dag_node best_sum, sum;
+			int score;
+			for (const auto& p : pieces) {
+				score = 0;
+				for (const auto& t : targets) {
+					score += check_insert(t.second, p.second);
+				}
+				sum = p.first;
+				if (score > best_score) {
+					best_score = score;
+					best_sum = sum;
+					best_piece = std::move(p.second);
+				}
+			}
+			if (best_score) {
+				score = best_score;
+				piece = std::move(best_piece);
+				sum = best_sum;
+				for (auto& t : targets) {
+					if (do_insert(t.second, piece)) {
+						sums[t.first] = sums[t.first] + sum;
+					}
+				}
+			}
+			fprintf( stderr, "%i\n", best_score);
+		} while (best_score);
+
+		for (auto& t : targets) {
+			for (auto p : t.second.pos) {
+				sums[t.first] = sums[t.first] + p;
+			}
+			for (auto n : t.second.neg) {
+				sums[t.first] = sums[t.first] - n;
 			}
 		}
-		/*for (int k = 8; k >= 2; k--) {
-		 int best_score;
-		 do {
-		 best_score = 0;
-		 std::vector<intersection_t> intersections;
-		 const auto combos = nchoosek(N, k);
-		 int itot;
-		 std::vector<intersection_t> best_intersections;
-		 adds_t adds;
-		 adds_t best_adds;
-		 for (const auto& combo : combos) {
-		 intersections.resize(0);
-		 adds.pos.clear();
-		 adds.neg.clear();
-		 itot = 0;
-		 for (auto i : combo) {
-		 auto I = targ_vec[i];
-		 std::set<vertex> padds, nadds;
-		 std::set<vertex> padds1, nadds1;
-		 if (adds.pos.size() + adds.neg.size() == 0) {
-		 padds.insert(targets[I].pos.begin(), targets[I].pos.end());
-		 nadds.insert(targets[I].neg.begin(), targets[I].neg.end());
-		 } else {
-		 padds = intersection(adds.pos, targets[I].pos);
-		 nadds = intersection(adds.neg, targets[I].neg);
-		 }
-		 if (adds.pos.size() + adds.neg.size() == 0) {
-		 nadds1.insert(targets[I].pos.begin(), targets[I].pos.end());
-		 padds1.insert(targets[I].neg.begin(), targets[I].neg.end());
-		 } else {
-		 nadds1 = intersection(adds.neg, targets[I].pos);
-		 padds1 = intersection(adds.pos, targets[I].neg);
-		 }
-		 intersection_t entry;
-		 entry.v = I;
-		 if (padds.size() + nadds.size() < padds1.size() + nadds1.size()) {
-		 std::swap(padds, padds1);
-		 std::swap(nadds, nadds1);
-		 entry.sgn = -1;
-		 } else {
-		 entry.sgn = +1;
-		 }
-		 adds.pos = std::move(padds);
-		 adds.neg = std::move(nadds);
-		 itot = adds.pos.size() + adds.neg.size();
-		 if (itot <= 1) {
-		 break;
-		 }
-		 intersections.push_back(entry);
-		 }
-		 if (itot > best_score) {
-		 best_score = itot;
-		 best_adds = std::move(adds);
-		 best_intersections = std::move(intersections);
-		 }
-		 }
-		 if (best_score >= 2) {
-		 intersections = std::move(best_intersections);
-		 adds = std::move(best_adds);
-		 dag_node sum = dag_node(0.0);
-		 for (auto p : adds.pos) {
-		 sum = sum + dag_node(p);
-		 }
-		 for (auto n : adds.neg) {
-		 sum = sum - dag_node(n);
-		 }
-		 for (auto i : intersections) {
-		 auto& target = targets[i.v];
-		 if (i.sgn > 0) {
-		 target.pos = target.pos - adds.pos;
-		 target.neg = target.neg - adds.neg;
-		 target.pos.insert(sum.id);
-		 } else {
-		 target.pos = target.pos - adds.neg;
-		 target.neg = target.neg - adds.pos;
-		 target.neg.insert(sum.id);
-		 }
-		 }
-		 }
-		 } while (best_score >= 2);
-		 }*/
+		for (auto add : targets) {
+			fprintf( stderr, "%i = ", (int) add.first);
+			for (auto p : add.second.pos) {
+				fprintf(stderr, "+ %i ", (int) p);
+			}
+			for (auto n : add.second.neg) {
+				fprintf(stderr, "- %i ", (int) n);
+			}
+			fprintf( stderr, "\n");
+		}
 		for (auto target : targets) {
-			dag_node sum(0.0);
-			for (auto term : target.second.pos) {
-				sum = sum + term;
-			}
-			for (auto term : target.second.neg) {
-				sum = sum - term;
-			}
 			auto props = g[target.first];
-			g.swap(target.first, sum.id);
+			g.swap(target.first, sums[target.first].id);
 			g[target.first].name = props.name;
 		}
 	}
@@ -773,6 +787,7 @@ public:
 			dag_node c;
 			c.id = o;
 			auto nm = graph->get_name(o);
+			c = optimize(c);
 			c = optimize_mults(c);
 			c = optimize(c);
 			graph->set_name(c.id, nm);
@@ -1174,6 +1189,7 @@ public:
 				break;
 			}
 		}
+		cnt.sz = graph->size();
 		return cnt;
 	}
 
