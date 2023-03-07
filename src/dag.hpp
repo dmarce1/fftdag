@@ -375,8 +375,116 @@ public:
 	}
 };
 
+struct const_t {
+	double c;
+	const_t() {
+		c = 0.0;
+	}
+};
+
+struct sum_t {
+	std::unordered_map<dag<math_props>::vertex, const_t, dag<math_props>::vertex_key> terms;
+	sum_t& operator=(const dag<math_props>::vertex& a) {
+		terms[a].c = 1.0;
+		return *this;
+	}
+	void print() const {
+		fprintf( stderr, "(");
+		for( auto i = terms.begin(); i != terms.end(); i++) {
+			if( i != terms.begin()) {
+				fprintf( stderr, " + ");
+			}
+			fprintf( stderr, "%e * x%i", i->second.c, (int) i->first);
+		}
+		fprintf( stderr, ")\n");
+	}
+};
+
+inline void kill_zeros(sum_t& C) {
+	auto i = C.terms.begin();
+	while (i != C.terms.end()) {
+		if (close2(i->second.c, 0.0)) {
+			i = C.terms.erase(i);
+		} else {
+			i++;
+		}
+	}
+}
+
+inline sum_t operator+(const sum_t& A, const sum_t& B) {
+	sum_t C = A;
+	for (auto b : B.terms) {
+		C.terms[b.first].c += b.second.c;
+	}
+	kill_zeros(C);
+	return C;
+}
+
+inline sum_t operator-(const sum_t& A, const sum_t& B) {
+	sum_t C = A;
+	for (auto b : B.terms) {
+		C.terms[b.first].c -= b.second.c;
+	}
+	kill_zeros(C);
+	return C;
+}
+
+inline sum_t operator*(const double a, const sum_t& B) {
+	sum_t C = B;
+	for (auto b : B.terms) {
+		C.terms[b.first].c *= a;
+	}
+	kill_zeros(C);
+	return C;
+}
+
 class math_dag: public dag<math_props> {
 public:
+	sum_t sigma(vertex v) {
+		const auto type = get_type(v);
+		std::vector<sum_t> sums;
+		sum_t sum;
+		const auto ein = get_edges_in(v);
+		double c0;
+		if( type == MUL) {
+			auto i = ein.begin();
+			auto ein0 = *i;
+			i++;
+			auto ein1 = *i;
+			if( (*this)[ein0].type == CON) {
+				c0 = (*this)[ein0].value;
+				sums.push_back(sigma(ein1));
+			} else {
+				c0 = (*this)[ein1].value;
+				sums.push_back(sigma(ein0));
+			}
+		} else {
+			for( auto e : ein) {
+				sums.push_back(sigma(e));
+			}
+		}
+		switch(type) {
+		case ADD:
+			sum = sums[0] + sums[1];
+			break;
+		case SUB:
+			sum = sums[0] - sums[1];
+			break;
+		case NSUB:
+			sum = sums[1] - sums[0];
+			break;
+		case MUL:
+			sum = c0 * sums[0];
+			break;
+		case NEG:
+			sum = -1.0 * sums[0];
+			break;
+		case IN:
+			sum = v;
+			break;
+		}
+		return sum;
+	}
 	vertex make_vertex(vertex_type type) {
 		vertex rc = dag<math_props>::make_vertex(type == IN);
 		set_type(rc, type);
@@ -427,6 +535,9 @@ public:
 	}
 	dag_node(vertex v) :
 			id(v), level(0) {
+	}
+	static sum_t sigma(dag_node v) {
+		return graph->sigma(v.id);
 	}
 
 	bool operator<(const dag_node& other) {
