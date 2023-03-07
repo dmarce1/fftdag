@@ -412,6 +412,7 @@ public:
 class dag_node {
 	using vertex = dag<math_props>::vertex;
 	vertex id;
+	int level;
 	static std::shared_ptr<math_dag> graph;
 	static std::map<double, vertex> const_map;
 public:
@@ -425,7 +426,7 @@ public:
 		graph = std::make_shared<math_dag>();
 	}
 	dag_node(vertex v) :
-			id(v) {
+			id(v), level(0) {
 	}
 
 	bool operator<(const dag_node& other) {
@@ -452,179 +453,6 @@ public:
 		vertex v;
 		int sgn;
 	};
-	static void optimize_adds() {
-		auto& g = *graph;
-		std::unordered_map<vertex, adds_t, dag<math_props>::vertex_key> targets;
-		auto list = g.sort();
-		for (auto n : list) {
-			if (is_additive(g[n].type)) {
-				auto eout = g.get_edges_out(n);
-				bool terminal = false;
-				if (eout.size()) {
-					for (auto e : eout) {
-						if (!is_additive(g[e].type)) {
-							terminal = true;
-						}
-					}
-				} else {
-					terminal = true;
-				}
-				if (terminal) {
-					targets[n] = collect_adds(n);
-				}
-			}
-		}
-
-		int N = targets.size();
-		for (auto add : targets) {
-			fprintf( stderr, "%i = ", (int) add.first);
-			for (auto p : add.second.pos) {
-				fprintf(stderr, "+ %i ", (int) p);
-			}
-			for (auto n : add.second.neg) {
-				fprintf(stderr, "- %i ", (int) n);
-			}
-			fprintf( stderr, "\n");
-		}
-		std::vector<std::set<int>> sets;
-		std::vector<adds_t> target_vec;
-		for (auto u : targets) {
-			target_vec.push_back(u.second);
-		}
-		for (int i = 0; i < targets.size(); i++) {
-			std::set<int> set(target_vec[i].pos.begin(), target_vec[i].pos.end());
-			std::vector<int> negs(target_vec[i].neg.begin(), target_vec[i].neg.end());
-			for (auto n : negs) {
-				set.insert(-n);
-			}
-			sets.push_back(set);
-		}
-		auto sz = sets.size();
-		for (int i = 0; i < sz; i++) {
-			std::set<int> set;
-			for (auto j = sets[i].begin(); j != sets[i].end(); j++) {
-				set.insert(-*j);
-			}
-			sets.push_back(set);
-		}
-		auto inters = find_all_intersections<int, set_key>(sets);
-
-		std::unordered_map<vertex, adds_t, dag<math_props>::vertex_key> pieces;
-		std::unordered_set<vertex, dag<math_props>::vertex_key> used_pieces;
-		for (auto i : inters.map) {
-			adds_t add;
-			dag_node sum(0.0);
-			for (auto j : i.second) {
-				if (j > 0) {
-					auto v = vertex(j, &(*graph));
-					add.pos.insert(v);
-					sum = sum + dag_node(v);
-				} else {
-					auto v = vertex(-j, &(*graph));
-					add.neg.insert(v);
-					sum = sum - dag_node(v);
-				}
-			}
-			pieces[sum.id] = std::move(add);
-		}
-
-		const auto check_insert = [&targets](const adds_t& target, const adds_t& piece) {
-			auto pinter = intersection(target.pos, piece.pos).size();
-			auto ninter = intersection(target.neg, piece.neg).size();
-			if( ninter == piece.neg.size() && pinter == piece.pos.size() && ninter + pinter >=2) {
-				return true;
-			}
-			pinter = intersection(target.pos, piece.neg).size();
-			ninter = intersection(target.neg, piece.pos).size();
-			if( ninter == piece.pos.size() && pinter == piece.neg.size() && ninter + pinter >=2) {
-				return true;
-			}
-			return false;
-		};
-		const auto do_insert = [](adds_t& target, const adds_t& piece) {
-			auto pinter = intersection(target.pos, piece.pos).size();
-			auto ninter = intersection(target.neg, piece.neg).size();
-			if( ninter == piece.neg.size() && pinter == piece.pos.size() && ninter + pinter >=2) {
-				target.pos = target.pos - piece.pos;
-				target.neg = target.neg - piece.neg;
-				return 1;
-			} else {
-				pinter = intersection(target.pos, piece.neg).size();
-				ninter = intersection(target.neg, piece.pos).size();
-				if( ninter == piece.pos.size() && pinter == piece.neg.size() && ninter + pinter >=2) {
-					target.pos = target.pos - piece.neg;
-					target.neg = target.neg - piece.pos;
-					return -1;
-				}
-			}
-			return 0;
-		};
-		int best_score;
-		std::unordered_map<vertex, dag_node, dag<math_props>::vertex_key> sums;
-		for (const auto& t : targets) {
-			sums[t.first] = dag_node(0.0);
-		}
-		do {
-			best_score = 0;
-			adds_t best_piece, piece;
-			dag_node best_sum, sum;
-			int score;
-			for (const auto& p : pieces) {
-				const auto wt = p.second.pos.size() + p.second.neg.size() - 1;
-				score = -wt;
-				for (const auto& t : targets) {
-					if (check_insert(t.second, p.second)) {
-						score += wt;
-					}
-				}
-				score = std::max(0, score);
-				sum = p.first;
-				if (score > best_score) {
-					best_score = score;
-					best_sum = sum;
-					best_piece = std::move(p.second);
-				}
-			}
-			if (best_score) {
-				score = best_score;
-				piece = std::move(best_piece);
-				sum = best_sum;
-				for (auto& t : targets) {
-					int i = do_insert(t.second, piece);
-					if (i == 1 ) {
-						sums[t.first] = sums[t.first] + sum;
-					} else if( i == -1 ) {
-						sums[t.first] = sums[t.first] - sum;
-					}
-				}
-			}
-			fprintf( stderr, "%i\n", best_score);
-		} while (best_score);
-
-		for (auto& t : targets) {
-			for (auto p : t.second.pos) {
-				sums[t.first] = sums[t.first] + p;
-			}
-			for (auto n : t.second.neg) {
-				sums[t.first] = sums[t.first] - n;
-			}
-		}
-		for (auto add : targets) {
-			fprintf( stderr, "%i = ", (int) add.first);
-			for (auto p : add.second.pos) {
-				fprintf(stderr, "+ %i ", (int) p);
-			}
-			for (auto n : add.second.neg) {
-				fprintf(stderr, "- %i ", (int) n);
-			}
-			fprintf( stderr, "\n");
-		}
-		for (auto target : targets) {
-			auto props = g[target.first];
-			g.swap(target.first, sums[target.first].id);
-			g[target.first].name = props.name;
-		}
-	}
 	static vertex find_vertex(vertex_type type, std::vector<vertex> ins) {
 		auto vs = graph->find_vertices(ins);
 		for (auto v : vs) {
@@ -670,134 +498,6 @@ public:
 		dag_node in;
 		in.id = *(graph->get_edges_in(id).begin());
 		return in;
-	}
-	static std::vector<add_type> collect_mults(vertex v) {
-		std::vector<add_type> rc;
-		if (is_additive(graph->get_type(v))) {
-			int i = 0;
-			auto edges_in = graph->get_edges_in(v);
-			for (auto e : edges_in) {
-				auto tmp = collect_mults(e);
-				if ((i == 0 && graph->get_type(v) == NSUB) || (i == 1 && graph->get_type(v) == SUB)) {
-					for (auto& t : tmp) {
-						t.c = -t.c;
-					}
-				}
-				rc.insert(rc.end(), tmp.begin(), tmp.end());
-				i++;
-			}
-		} else {
-			add_type add;
-			auto edgess = graph->get_edges_in(v);
-			std::vector<vertex> edges;
-			for (auto e : edgess) {
-				edges.push_back(e);
-			}
-			if (graph->get_type(v) == MUL) {
-				if (graph->get_type(edges[0]) == CON) {
-					add.v = edges[1];
-					add.c = graph->get_value(edges[0]);
-				} else if (graph->get_type(edges[1]) == CON) {
-					add.v = edges[0];
-					add.c = graph->get_value(edges[1]);
-				} else {
-					add.v = v;
-					add.c = 1;
-				}
-			} else if (graph->get_type(v) == IN) {
-				add.c = 1.0;
-				add.v = v;
-			} else {
-				add.c = -1.0;
-				add.v = edges[0];
-			}
-			rc.push_back(add);
-		}
-		return rc;
-	}
-	struct adds_t {
-		std::set<vertex> pos;
-		std::set<vertex> neg;
-	};
-	static adds_t collect_adds(vertex v) {
-		adds_t rc;
-		if (is_additive(graph->get_type(v))) {
-			int i = 0;
-			auto edges_in = graph->get_edges_in(v);
-			for (auto e : edges_in) {
-				auto tmp = collect_adds(e);
-				if ((i == 0 && graph->get_type(v) == NSUB) || (i == 1 && graph->get_type(v) == SUB)) {
-					std::swap(tmp.pos, tmp.neg);
-				}
-				rc.pos.insert(tmp.pos.begin(), tmp.pos.end());
-				rc.neg.insert(tmp.neg.begin(), tmp.neg.end());
-				i++;
-			}
-		} else {
-			rc.pos.insert(v);
-		}
-		return rc;
-	}
-
-	static dag_node optimize_mults(dag_node nd) {
-		auto adds = collect_mults(nd.id);
-		std::map<double, std::vector<add_type>> sorted_adds;
-		for (int i = 0; i < adds.size(); i++) {
-			auto j = sorted_adds.begin();
-			while (j != sorted_adds.end()) {
-				if (close2(j->first, std::abs(adds[i].c))) {
-					break;
-				}
-				j++;
-			}
-			if (j == sorted_adds.end()) {
-				sorted_adds[std::abs(adds[i].c)].clear();
-				j = sorted_adds.find(std::abs(adds[i].c));
-			}
-			j->second.push_back(adds[i]);
-		}
-		dag_node main_sum(0.0);
-		dag_node sum(0.0);
-		for (auto j = sorted_adds.begin(); j != sorted_adds.end(); j++) {
-			sum = dag_node(0.0);
-			for (int i = 0; i < j->second.size(); i++) {
-				auto v = j->second[i];
-				assert(close2(std::abs(v.c), j->first));
-				if (v.c > 0.0) {
-					sum = sum + dag_node(v.v);
-				} else {
-					sum = sum - dag_node(v.v);
-				}
-			}
-			auto coeff = j->first;
-			if (close2(coeff, 1.0)) {
-			} else if (close2(coeff, -1.0)) {
-				sum = -sum;
-			} else {
-				sum = sum * dag_node(coeff);
-			}
-			main_sum = main_sum + sum;
-		}
-		sum = main_sum;
-		auto props = (*graph)[nd.id];
-		graph->swap(nd.id, sum.id);
-		(*graph)[nd.id].name = props.name;
-		return nd;
-	}
-
-	static void optimize() {
-		auto outputs = graph->get_outputs();
-		graph->clear_outputs();
-		for (auto o : outputs) {
-			dag_node c;
-			c.id = o;
-			auto nm = graph->get_name(o);
-			c = optimize(c);
-			c = optimize_mults(c);
-			c = optimize(c);
-			graph->set_name(c.id, nm);
-			graph->set_output(c.id);
-		}
 	}
 
 	static dag_node optimize(dag_node node) {
@@ -919,6 +619,7 @@ public:
 			std::swap(a, b);
 		}
 		c.id = graph->make_vertex(type);
+		c.level = std::max(a.level, b.level) + 1;
 		graph->add_edge(a.id, c.id);
 		graph->add_edge(b.id, c.id);
 		auto edges_in = graph->get_edges_in(c.id);
@@ -931,6 +632,7 @@ public:
 			c.id = common;
 			return c;
 		}
+		c.level = a.level + 1;
 		c.id = graph->make_vertex(type);
 		graph->add_edge(a.id, c.id);
 		return optimize(c);
