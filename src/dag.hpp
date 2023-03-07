@@ -529,19 +529,17 @@ public:
 		}
 
 		const auto check_insert = [&targets](const adds_t& target, const adds_t& piece) {
-			int pscore = 0;
-			int nscore = 0;
 			auto pinter = intersection(target.pos, piece.pos).size();
 			auto ninter = intersection(target.neg, piece.neg).size();
 			if( ninter == piece.neg.size() && pinter == piece.pos.size() && ninter + pinter >=2) {
-				pscore = ninter + pinter;
+				return true;
 			}
 			pinter = intersection(target.pos, piece.neg).size();
 			ninter = intersection(target.neg, piece.pos).size();
 			if( ninter == piece.pos.size() && pinter == piece.neg.size() && ninter + pinter >=2) {
-				nscore = ninter + pinter;
+				return true;
 			}
-			return std::max(pscore, nscore);
+			return false;
 		};
 		const auto do_insert = [](adds_t& target, const adds_t& piece) {
 			auto pinter = intersection(target.pos, piece.pos).size();
@@ -549,17 +547,17 @@ public:
 			if( ninter == piece.neg.size() && pinter == piece.pos.size() && ninter + pinter >=2) {
 				target.pos = target.pos - piece.pos;
 				target.neg = target.neg - piece.neg;
-				return true;
+				return 1;
 			} else {
 				pinter = intersection(target.pos, piece.neg).size();
 				ninter = intersection(target.neg, piece.pos).size();
 				if( ninter == piece.pos.size() && pinter == piece.neg.size() && ninter + pinter >=2) {
 					target.pos = target.pos - piece.neg;
 					target.neg = target.neg - piece.pos;
-					return true;
+					return -1;
 				}
 			}
-			return false;
+			return 0;
 		};
 		int best_score;
 		std::unordered_map<vertex, dag_node, dag<math_props>::vertex_key> sums;
@@ -572,10 +570,14 @@ public:
 			dag_node best_sum, sum;
 			int score;
 			for (const auto& p : pieces) {
-				score = 0;
+				const auto wt = p.second.pos.size() + p.second.neg.size() - 1;
+				score = -wt;
 				for (const auto& t : targets) {
-					score += check_insert(t.second, p.second);
+					if (check_insert(t.second, p.second)) {
+						score += wt;
+					}
 				}
+				score = std::max(0, score);
 				sum = p.first;
 				if (score > best_score) {
 					best_score = score;
@@ -588,8 +590,11 @@ public:
 				piece = std::move(best_piece);
 				sum = best_sum;
 				for (auto& t : targets) {
-					if (do_insert(t.second, piece)) {
+					int i = do_insert(t.second, piece);
+					if (i == 1 ) {
 						sums[t.first] = sums[t.first] + sum;
+					} else if( i == -1 ) {
+						sums[t.first] = sums[t.first] - sum;
 					}
 				}
 			}
