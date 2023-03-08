@@ -1,11 +1,10 @@
-#include "dag.hpp"
+#include "fft.hpp"
 
 #include <cmath>
-#include <complex>
 
 struct cmplx {
-	dag_node x;
-	dag_node y;
+	math_vertex x;
+	math_vertex y;
 	cmplx operator+(cmplx other) {
 		x += other.x;
 		y += other.y;
@@ -21,12 +20,12 @@ struct cmplx {
 };
 
 
-std::vector<dag_node> fft_radix2(std::vector<dag_node> xin, int N) {
+std::vector<math_vertex> fft_radix2(std::vector<math_vertex> xin, int N) {
 	if (N == 1) {
 		return xin;
 	}
-	std::vector<dag_node> xout(2 * N);
-	std::vector<dag_node> even, odd;
+	std::vector<math_vertex> xout(2 * N);
+	std::vector<math_vertex> even, odd;
 	for (int n = 0; n < N / 2; n++) {
 		even.push_back(xin[4 * n]);
 		even.push_back(xin[4 * n + 1]);
@@ -39,25 +38,25 @@ std::vector<dag_node> fft_radix2(std::vector<dag_node> xin, int N) {
 	odd = fft_radix2(odd, N / 2);
 	for (int k = 0; k < N / 2; k++) {
 		double theta = -2.0 * M_PI * k / N;
-		auto twr = dag_node(cos(theta));
-		auto twi = dag_node(sin(theta));
+		auto twr = math_vertex(cos(theta));
+		auto twi = math_vertex(sin(theta));
 		auto tr = odd[2 * k] * twr - odd[2 * k + 1] * twi;
 		auto ti = odd[2 * k] * twi + odd[2 * k + 1] * twr;
 		xout[2 * k] = even[2 * k] + tr;
 		xout[2 * (k + N / 2)] = even[2 * k] - tr;
 		xout[2 * k + 1] = even[2 * k + 1] + ti;
 		xout[2 * (k + N / 2) + 1] = even[2 * k + 1] - ti;
-	}
+		}
 	return xout;
 }
 
+/*
 
-
-std::vector<dag_node> fft_radix4(std::vector<dag_node> xin, int N) {
+std::vector<math_vertex> fft_radix4(std::vector<math_vertex> xin, int N) {
 	if (N == 1) {
 		return xin;
 	} else if (N == 2) {
-		std::vector<dag_node> xout(4);
+		std::vector<math_vertex> xout(4);
 		auto x0 = xin[0] + xin[2];
 		auto x1 = xin[0] - xin[2];
 		auto y0 = xin[1] + xin[3];
@@ -68,8 +67,8 @@ std::vector<dag_node> fft_radix4(std::vector<dag_node> xin, int N) {
 		xout[3] = y1;
 		return xout;
 	}
-	std::vector<dag_node> xout(2 * N);
-	std::vector<dag_node> even, odd1, odd3;
+	std::vector<math_vertex> xout(2 * N);
+	std::vector<math_vertex> even, odd1, odd3;
 	for (int n = 0; n < N / 2; n++) {
 		even.push_back(xin[4 * n]);
 		even.push_back(xin[4 * n + 1]);
@@ -93,12 +92,12 @@ std::vector<dag_node> fft_radix4(std::vector<dag_node> xin, int N) {
 		odd1 = fft_radix4(odd1, N / 4);
 		odd3 = fft_radix4(odd3, N / 4);
 	}
-	const auto tw_mult = [N](int k, dag_node r, dag_node i) {
-		std::pair<dag_node, dag_node> rc;
+	const auto tw_mult = [N](int k, math_vertex r, math_vertex i) {
+		std::pair<math_vertex, math_vertex> rc;
 		double theta = -2.0 * M_PI * k / N;
 
-		auto twr = dag_node(cos(theta));
-		auto twi = dag_node(sin(theta));
+		auto twr = math_vertex(cos(theta));
+		auto twi = math_vertex(sin(theta));
 		rc.first = r * twr - i * twi;
 		rc.second = i * twr + r * twi;
 		return rc;
@@ -130,14 +129,14 @@ std::vector<dag_node> fft_radix4(std::vector<dag_node> xin, int N) {
 	return xout;
 }
 
-std::vector<dag_node> fft_prime_power(int R, std::vector<dag_node> xin, int N) {
+std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, int N) {
 	if (N == 1) {
 		return xin;
 	}
 	const int N1 = R;
 	const int N2 = N / R;
-	std::vector<dag_node> xout(2 * N);
-	std::vector<std::vector<dag_node>> sub(N1, std::vector<dag_node>(2 * N2));
+	std::vector<math_vertex> xout(2 * N);
+	std::vector<std::vector<math_vertex>> sub(N1, std::vector<math_vertex>(2 * N2));
 
 	for (int n2 = 0; n2 < N2; n2++) {
 		for (int n1 = 0; n1 < N1; n1++) {
@@ -168,4 +167,4 @@ std::vector<dag_node> fft_prime_power(int R, std::vector<dag_node> xin, int N) {
 		}
 	}
 	return xout;
-}
+}*/

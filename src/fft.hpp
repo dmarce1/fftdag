@@ -1,3 +1,5 @@
 #pragma once
 
-//std::vector<dag_node> fft_prime_power(int R, std::vector<dag_node> xin, int N);
+#include "math.hpp"
+
+std::vector<math_vertex> fft_radix2(std::vector<math_vertex> xin, int N);
