@@ -36,6 +36,8 @@ int edge_count(operation_t op) {
 	}
 }
 
+std::map<double, math_vertex> math_vertex::consts;
+
 math_vertex::properties::properties() {
 	out_num = -1;
 }
@@ -44,12 +46,12 @@ std::string math_vertex::properties::print_code(const std::vector<properties>& e
 	std::string code;
 	if (out_num != -1) {
 		std::string nm = std::string("x[") + std::to_string(out_num) + std::string("]");
-		auto tmp = db->names.reserve_name(std::move(nm));
+		auto tmp = names->reserve_name(std::move(nm));
 		name = tmp.first;
 		code += tmp.second;
 	} else if (name == nullptr) {
-		assert(db != nullptr);
-		name = db->names.generate_name();
+		assert(names != nullptr);
+		name = names->generate_name();
 	}
 	if (is_arithmetic(op)) {
 		char* ptr;
@@ -79,11 +81,13 @@ void math_vertex::replace_edge(const math_vertex& a, math_vertex&& b) {
 	v.replace_edge_in(a.v, std::move(b.v));
 }
 
-void math_vertex::set_database(const std::shared_ptr<properties::database_t>& db) {
-	if (v.properties().db == nullptr && db != nullptr) {
-		v.properties().db = db;
-		for (int i = 0; i < v.get_edge_count(); i++) {
-			get_edge_in(i).set_database(db);
+void math_vertex::set_database(const std::shared_ptr<name_server>& db) {
+	if (v.properties().names == nullptr && db != nullptr) {
+		if (is_arithmetic(v.properties().op)) {
+			v.properties().names = db;
+			for (int i = 0; i < v.get_edge_count(); i++) {
+				get_edge_in(i).set_database(db);
+			}
 		}
 	}
 }
@@ -93,8 +97,8 @@ math_vertex math_vertex::binary_op(operation_t op, math_vertex A, math_vertex B)
 	props.op = op;
 	math_vertex C;
 	C.v = dag_vertex<properties>::new_(std::move(props));
-	auto db = A.v.properties().db;
-	db = (db == nullptr) ? B.v.properties().db : db;
+	auto db = A.v.properties().names;
+	db = (db == nullptr) ? B.v.properties().names : db;
 	A.set_database(db);
 	B.set_database(db);
 	C.set_database(db);
@@ -103,12 +107,15 @@ math_vertex math_vertex::binary_op(operation_t op, math_vertex A, math_vertex B)
 	return C.optimize();
 }
 
+math_vertex::~math_vertex() {
+}
+
 math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 	properties props;
 	props.op = op;
 	math_vertex C;
 	C.v = dag_vertex<properties>::new_(std::move(props));
-	auto db = A.v.properties().db;
+	auto db = A.v.properties().names;
 	A.set_database(db);
 	C.set_database(db);
 	C.v.add_edge_in(A.v);
@@ -117,12 +124,25 @@ math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 
 math_vertex::math_vertex(double constant) {
 	if (constant >= 0.0) {
-		properties props;
-		props.op = CON;
-		props.value = constant;
-		props.name = std::make_shared<std::string>(std::to_string(constant));
-		props.db = nullptr;
-		v = dag_vertex<properties>::new_(std::move(props));
+		auto iter = consts.upper_bound(constant);
+		int flag = false;
+		if (iter != consts.begin()) {
+			iter--;
+			if (close2(iter->first, constant)) {
+				flag = true;
+			}
+		}
+		if (!flag) {
+			properties props;
+			props.op = CON;
+			props.value = constant;
+			props.name = std::make_shared<std::string>(std::to_string(constant));
+			props.names = nullptr;
+			v = dag_vertex<properties>::new_(std::move(props));
+			consts[constant] = *this;
+		} else {
+			*this = iter->second;
+		}
 	} else {
 		*this = -math_vertex(-constant);
 	}
@@ -133,21 +153,21 @@ math_vertex& math_vertex::operator=(double constant) {
 	return *this;
 }
 
-math_vertex math_vertex::new_input(std::shared_ptr<properties::database_t> db, std::string&& name) {
+math_vertex math_vertex::new_input(std::shared_ptr<name_server> db, std::string&& name) {
 	properties props;
 	math_vertex C;
 	props.op = IN;
-	auto tmp = db->names.reserve_name(std::move(name));
+	auto tmp = db->reserve_name(std::move(name));
 	props.name = tmp.first;
 	assert(tmp.second == "");
-	props.db = db;
+	props.names = db;
 	C.v = dag_vertex<properties>::new_(std::move(props));
 	return std::move(C);
 }
 
 std::vector<math_vertex> math_vertex::new_inputs(int cnt) {
 	std::vector<math_vertex> inputs;
-	auto db = std::make_shared<properties::database_t>();
+	auto db = std::make_shared<name_server>();
 	for (int i = 0; i < cnt; i++) {
 		inputs.push_back(new_input(db, "x[" + std::to_string(i) + "]"));
 	}
@@ -199,11 +219,11 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n].v.properties().out_num = n;
 	}
-	auto db = outputs[0].v.properties().db;
+	auto db = outputs[0].v.properties().names;
 	for (auto& o : outputs) {
 		code += o.execute(exe);
 	}
-	auto decls = db->names.get_declarations();
+	auto decls = db->get_declarations();
 	code = decls + code;
 	return std::move(code);
 }

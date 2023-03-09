@@ -52,12 +52,14 @@ private:
 		}
 	}
 public:
+	dag_vertex() = default;
 	void swap(dag_vertex& v) {
 		std::swap(*v.state_ptr, *state_ptr);
 	}
 	static dag_vertex new_(Properties&& props) {
 		dag_vertex v;
-		v.state_ptr = std::make_shared<state>();
+		auto sptr = new state;
+		v.state_ptr = std::shared_ptr<state>(sptr);
 		v.state_ptr->props = std::move(props);
 		v.state_ptr->id = next_id;
 		next_id++;

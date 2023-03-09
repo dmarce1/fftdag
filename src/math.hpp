@@ -10,7 +10,9 @@
 
 #include "dag.hpp"
 #include "names.hpp"
+#include "util.hpp"
 
+#include <map>
 #include <unordered_map>
 #include <stack>
 
@@ -23,18 +25,16 @@ bool is_arithmetic(operation_t op);
 class math_vertex {
 public:
 	struct properties {
-		struct database_t {
-			name_server names;
-		};
+		std::shared_ptr<name_server> names;
 		operation_t op;
 		name_server::name_ptr name;
 		double value;
 		int out_num;
-		std::shared_ptr<database_t> db;
 		std::string print_code(const std::vector<properties>& edges);
 		properties();
 	};
 	math_vertex optimize();
+	~math_vertex();
 	bool is_neg() const;
 	math_vertex get_neg() const;
 	void swap(math_vertex& v);
@@ -57,7 +57,7 @@ public:
 	math_vertex& operator-=(const math_vertex& other);
 	math_vertex& operator*=(const math_vertex& other);
 	std::string execute(dag_vertex<properties>::executor& exe);
-	static math_vertex new_input(std::shared_ptr<properties::database_t> db, std::string&& name);
+	static math_vertex new_input(std::shared_ptr<name_server> db, std::string&& name);
 	static std::vector<math_vertex> new_inputs(int cnt);
 	static std::string execute_all(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
@@ -66,9 +66,10 @@ public:
 	friend math_vertex operator-(const math_vertex& A);
 private:
 	dag_vertex<properties> v;
+	static std::map<double, math_vertex> consts;
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);
 	static math_vertex unary_op(operation_t op, math_vertex A);
-	void set_database(const std::shared_ptr<properties::database_t>& db);
+	void set_database(const std::shared_ptr<name_server>& db);
 };
 
 #endif /* MATH_HPP_ */
