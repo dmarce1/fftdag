@@ -36,7 +36,7 @@ public:
 	};
 	struct equal {
 		size_t operator()(const std::weak_ptr<state>& a, const std::weak_ptr<state>& b) const {
-			return std::shared_ptr<state>(a).get() && std::shared_ptr<state>(b).get();
+			return std::shared_ptr<state>(a).get() == std::shared_ptr<state>(b).get();
 		}
 	};
 	using executor = std::unordered_map<std::weak_ptr<state>, bool, key, equal>;
@@ -52,10 +52,19 @@ private:
 		}
 	}
 public:
-	dag_vertex() = default;
-	void swap(dag_vertex& v) {
-		std::swap(*v.state_ptr, *state_ptr);
+	class weak_ref {
+		std::weak_ptr<state> ptr;
+	public:
+		weak_ref() = default;
+		weak_ref(const dag_vertex& v) {
+			ptr = v.state_ptr;
+		}
+		friend class dag_vertex;
+	};
+	dag_vertex(const weak_ref& ref) {
+		state_ptr = std::shared_ptr<state>(ref.ptr);
 	}
+	dag_vertex() = default;
 	static dag_vertex new_(Properties&& props) {
 		dag_vertex v;
 		auto sptr = new state;
@@ -144,7 +153,8 @@ public:
 	const Properties& properties() const {
 		return state_ptr->props;
 	}
-	~dag_vertex() {
+	int use_count() const {
+		return state_ptr.use_count();
 	}
 };
 

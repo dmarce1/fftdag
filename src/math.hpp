@@ -11,6 +11,7 @@
 #include "dag.hpp"
 #include "names.hpp"
 #include "util.hpp"
+#include "assoc_set.hpp"
 
 #include <map>
 #include <unordered_map>
@@ -21,6 +22,8 @@ typedef enum {
 } operation_t;
 
 bool is_arithmetic(operation_t op);
+
+class cse_database;
 
 class math_vertex {
 public:
@@ -33,15 +36,36 @@ public:
 		std::string print_code(const std::vector<properties>& edges);
 		properties();
 	};
+	class weak_ref {
+		dag_vertex<properties>::weak_ref ptr;
+	public:
+		weak_ref() = default;
+		weak_ref(const math_vertex& v);
+		bool operator<(const weak_ref&) const;
+		bool operator==(const weak_ref&) const;
+		friend class math_vertex;
+	};
+	class value_number {
+		operation_t op;
+		assoc_set x;
+		friend class math_vertex;
+	public:
+		bool operator==(const value_number& other) const;
+		value_number();
+	};
+	struct value_key {
+		size_t operator()( const value_number& value ) const;
+	};
+	math_vertex(const weak_ref& ref);
+	bool operator<(const math_vertex& other) const;
+	bool operator==(const math_vertex& other) const;
 	math_vertex optimize();
 	~math_vertex();
 	bool is_neg() const;
 	math_vertex get_neg() const;
-	void swap(math_vertex& v);
 	bool is_zero() const;
 	bool is_one() const;
 	bool is_neg_one() const;
-	int get_value_number() const;
 	math_vertex() = default;
 	math_vertex(const math_vertex&v) = default;
 	math_vertex(math_vertex&& v) = default;
@@ -52,6 +76,7 @@ public:
 	math_vertex(double constant);
 	math_vertex& operator=(double constant);
 	math_vertex get_edge_in(int i) const;
+	int get_edge_count() const;
 	void replace_edge(const math_vertex&, math_vertex&&);
 	math_vertex& operator+=(const math_vertex& other);
 	math_vertex& operator-=(const math_vertex& other);
@@ -66,7 +91,10 @@ public:
 	friend math_vertex operator-(const math_vertex& A);
 private:
 	dag_vertex<properties> v;
+	value_number vnum;
+	value_number compute_value_number();
 	static std::map<double, math_vertex> consts;
+	static std::unordered_map<value_number, math_vertex::weak_ref, value_key> cse;
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);
 	static math_vertex unary_op(operation_t op, math_vertex A);
 	void set_database(const std::shared_ptr<name_server>& db);

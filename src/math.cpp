@@ -36,7 +36,38 @@ int edge_count(operation_t op) {
 	}
 }
 
-std::map<double, math_vertex> math_vertex::consts;
+
+math_vertex::weak_ref::weak_ref(const math_vertex& v) {
+	ptr = dag_vertex<properties>::weak_ref(v.v);
+}
+
+math_vertex::math_vertex(const weak_ref& ref) {
+	v = dag_vertex<properties>(ref.ptr);
+}
+
+bool math_vertex::weak_ref::operator<(const math_vertex::weak_ref& other) const {
+	return math_vertex(*this) < math_vertex(other);
+}
+
+bool math_vertex::weak_ref::operator==(const math_vertex::weak_ref& other) const {
+	return math_vertex(*this) < math_vertex(other);
+}
+
+bool math_vertex::value_number::operator==(const value_number& other) const {
+	return (op == other.op) && (x == other.x);
+}
+
+math_vertex::value_number::value_number() {
+	op = ADD;
+}
+
+size_t math_vertex::value_key::operator()(const value_number& value) const {
+	int rc = (int) value.op;
+	for (auto i = value.x.begin(); i != value.x.end(); i++) {
+		rc = rc * 1664525 + 1013904223;
+	}
+	return rc;
+}
 
 math_vertex::properties::properties() {
 	out_num = -1;
@@ -104,10 +135,14 @@ math_vertex math_vertex::binary_op(operation_t op, math_vertex A, math_vertex B)
 	C.set_database(db);
 	C.v.add_edge_in(A.v);
 	C.v.add_edge_in(B.v);
-	return C.optimize();
-}
-
-math_vertex::~math_vertex() {
+	C = C.optimize();
+	C.compute_value_number();
+	if (cse.find(C.vnum) != cse.end()) {
+		C = cse[C.vnum];
+	} else {
+		cse[C.vnum] = C;
+	}
+	return std::move(C);
 }
 
 math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
@@ -119,7 +154,18 @@ math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 	A.set_database(db);
 	C.set_database(db);
 	C.v.add_edge_in(A.v);
-	return C.optimize();
+	C = C.optimize();
+	C.compute_value_number();
+	if (cse.find(C.vnum) != cse.end()) {
+		C = cse[C.vnum];
+	} else {
+		cse[C.vnum] = C;
+	}
+	return std::move(C);
+}
+
+math_vertex::~math_vertex() {
+	cse.erase(vnum);
 }
 
 math_vertex::math_vertex(double constant) {
@@ -145,6 +191,12 @@ math_vertex::math_vertex(double constant) {
 		}
 	} else {
 		*this = -math_vertex(-constant);
+	}
+	compute_value_number();
+	if (cse.find(vnum) != cse.end()) {
+		*this = cse[vnum];
+	} else {
+		cse[vnum] = *this;
 	}
 }
 
@@ -232,10 +284,6 @@ math_vertex::math_vertex(const dag_vertex<properties>& v0) {
 	v = std::move(v0);
 }
 
-void math_vertex::swap(math_vertex& other) {
-	v.swap(other.v);
-}
-
 math_vertex::math_vertex(dag_vertex<properties> && v0) {
 	v = std::move(v0);
 }
@@ -244,12 +292,36 @@ math_vertex math_vertex::get_edge_in(int i) const {
 	return math_vertex(v.get_edge_in(i));
 }
 
-int math_vertex::get_value_number() const {
-	if (v.properties().op == NEG) {
-		return -get_edge_in(0).get_value_number();
+int math_vertex::get_edge_count() const {
+	return v.get_edge_count();
+}
+
+math_vertex::value_number math_vertex::compute_value_number() {
+	value_number value;
+	const auto op = v.properties().op;
+	if (is_additive(op)) {
+		value.op = ADD;
+		const auto& a = get_edge_in(0).vnum.x;
+		const auto& b = get_edge_in(1).vnum.x;
+		if (op == ADD) {
+			value.x = a + b;
+		} else /* if op == SUB */{
+			value.x = a - b;
+		}
+	} else if (op == MUL) {
+		value.op = MUL;
+		const auto& a = get_edge_in(0).vnum.x;
+		const auto& b = get_edge_in(1).vnum.x;
+		value.x = a + b;
+	} else if (op == NEG) {
+		value.x = -get_edge_in(0).vnum.x;
+		value.op = get_edge_in(0).vnum.op;
 	} else {
-		return v.get_unique_id();
+		value.op = op;
+		value.x.insert(v.get_unique_id());
 	}
+	vnum = value;
+	return value;
 }
 
 bool math_vertex::is_zero() const {
@@ -357,3 +429,13 @@ math_vertex math_vertex::optimize() {
 	return c;
 }
 
+bool math_vertex::operator<(const math_vertex& other) const {
+	return v < other.v;
+}
+
+bool math_vertex::operator==(const math_vertex& other) const {
+	return v == other.v;
+}
+
+std::unordered_map<math_vertex::value_number, math_vertex::weak_ref, math_vertex::value_key> math_vertex::cse;
+std::map<double, math_vertex> math_vertex::consts;
