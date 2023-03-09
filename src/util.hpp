@@ -13,6 +13,10 @@
 #include <unordered_map>
 #include <functional>
 
+inline bool close2(double a, double b ) {
+	return std::abs(a - b) < 1.0e-12;
+}
+
 std::vector<std::vector<int>> nchoosek(int n, int k);
 
 template<class T>

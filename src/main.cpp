@@ -117,7 +117,7 @@ void print_code2(int N) {
 int test() {
 	constexpr int N = 8;
 	srand(time(NULL));
-	auto inputs = math_vertex::new_inputs("x", 2 * N);
+	auto inputs = math_vertex::new_inputs( 2 * N);
 	auto outputs = fft_radix2(inputs, N);
 //	auto outputs = fft_prime_power(2, inputs, N);
 	print_code1(N);
@@ -127,7 +127,6 @@ int test() {
 	print_code2(N);
 //	auto opcnt = dag_node::get_operation_count();
 //	fprintf(stderr, "tot = %i | add = %i | mul = %i | neg = %i| sz = %i\n", opcnt.tot, opcnt.add, opcnt.mul, opcnt.neg, opcnt.sz);
-	printf( "Done\n");
 
 	return 0;
 }

@@ -52,6 +52,9 @@ private:
 		}
 	}
 public:
+	void swap(dag_vertex& v) {
+		std::swap(*v.state_ptr, *state_ptr);
+	}
 	static dag_vertex new_(Properties&& props) {
 		dag_vertex v;
 		v.state_ptr = std::make_shared<state>();
@@ -84,6 +87,9 @@ public:
 	void execute(const function_type& func) {
 		executor touched;
 		execute(touched);
+	}
+	int get_unique_id() const {
+		return state_ptr->id;
 	}
 	bool operator==(const dag_vertex& v) const {
 		return state_ptr->id == v.state_ptr->id;
@@ -118,6 +124,9 @@ public:
 	}
 	dag_vertex get_edge_in(int i) const {
 		return state_ptr->edges_in[i];
+	}
+	int get_edge_count() const {
+		return state_ptr->edges_in.size();
 	}
 	void replace_edge_in(const dag_vertex& v, dag_vertex&& u) {
 		for (auto& edge : state_ptr->edges_in) {
