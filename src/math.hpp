@@ -27,12 +27,22 @@ class cse_database;
 
 class math_vertex {
 public:
+	class value_number {
+		operation_t op;
+		assoc_set x;
+		friend class math_vertex;
+	public:
+		bool operator==(const value_number& other) const;
+		value_number();
+		std::string to_string() const;
+	};
 	struct properties {
 		std::shared_ptr<name_server> names;
 		operation_t op;
 		name_server::name_ptr name;
 		double value;
 		int out_num;
+		std::shared_ptr<value_number> vnum;
 		std::string print_code(const std::vector<properties>& edges);
 		properties();
 	};
@@ -44,14 +54,6 @@ public:
 		bool operator<(const weak_ref&) const;
 		bool operator==(const weak_ref&) const;
 		friend class math_vertex;
-	};
-	class value_number {
-		operation_t op;
-		assoc_set x;
-		friend class math_vertex;
-	public:
-		bool operator==(const value_number& other) const;
-		value_number();
 	};
 	struct value_key {
 		size_t operator()( const value_number& value ) const;
@@ -77,6 +79,9 @@ public:
 	math_vertex& operator=(double constant);
 	math_vertex get_edge_in(int i) const;
 	int get_edge_count() const;
+	void set_value_number(value_number&&);
+	assoc_set associative_adds() const;
+	assoc_set associative_muls() const;
 	void replace_edge(const math_vertex&, math_vertex&&);
 	math_vertex& operator+=(const math_vertex& other);
 	math_vertex& operator-=(const math_vertex& other);
@@ -91,8 +96,7 @@ public:
 	friend math_vertex operator-(const math_vertex& A);
 private:
 	dag_vertex<properties> v;
-	value_number vnum;
-	value_number compute_value_number();
+	bool check_cse();
 	static std::map<double, math_vertex> consts;
 	static std::unordered_map<value_number, math_vertex::weak_ref, value_key> cse;
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);

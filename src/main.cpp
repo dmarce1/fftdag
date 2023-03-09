@@ -121,7 +121,6 @@ int test() {
 	auto outputs = fft_radix2(inputs, N);
 //	auto outputs = fft_prime_power(2, inputs, N);
 	print_code1(N);
-	inputs.clear();
 	auto code = math_vertex::execute_all(outputs);
 	printf( "%s\n", code.c_str());
 	print_code2(N);
