@@ -115,12 +115,12 @@ void print_code2(int N) {
 }
 
 int test() {
-	constexpr int N = 7;
+	constexpr int N = 16;
 	srand(time(NULL));
 	auto inputs = math_vertex::new_inputs(2 * N);
-//	auto outputs = fft_radix4(inputs, N);
+	auto outputs = fft_radix4(inputs, N);
 //	auto outputs = fft_radix2(inputs, N);
-	auto outputs = fft_prime_power(7, inputs, N);
+//	auto outputs = fft_prime_power(7, inputs, N);
 	print_code1(N);
 	auto cnt = math_vertex::operation_count(outputs);
 	auto code = math_vertex::execute_all(outputs);
