@@ -401,46 +401,61 @@ math_vertex math_vertex::get_neg() const {
 }
 math_vertex math_vertex::distribute_muls() {
 	auto dmuls = distributive_muls();
-	std::map<double, std::vector<dag_vertex<properties>>>map_add;
-	std::map<double, std::vector<dag_vertex<properties>>>map_sub;
-	if (dmuls.size() > 3) {
-		fprintf(stderr, "\n");
-		std::set<math_vertex> coeffs;
-		for (const auto& d : dmuls) {
-			if (!close2(d.c, 0.0)) {
-				if (d.c > 0.0) {
-					map_add[d.c].push_back(d.v);
-				} else {
-					map_sub[-d.c].push_back(d.v);
-				}
-				assert(consts.find(std::abs(d.c)) != consts.end());
-				coeffs.insert(consts[std::abs(d.c)]);
+	std::unordered_map<double, std::vector<dag_vertex<properties>>>map_add;
+	std::unordered_map<double, std::vector<dag_vertex<properties>>>map_sub;
+	std::set<math_vertex> coeffs;
+	for (const auto& d : dmuls) {
+		if (!close2(d.c, 0.0)) {
+			if (d.c > 0.0) {
+				map_add[d.c].push_back(d.v);
+			} else {
+				map_sub[-d.c].push_back(d.v);
 			}
+			assert(consts.find(std::abs(d.c)) != consts.end());
+			coeffs.insert(consts[std::abs(d.c)]);
+//		fprintf( stderr, "%e %i, ", d.c, d.v.get_unique_id());
 		}
+//		fprintf( stderr, "\n");
+	}
+	int max_cnt = 0;
+	bool flag = false;
+	for (auto c0 : coeffs) {
+		double c = c0.get_value();
+		if (!close2(c, 1.0)) {
+			const int cnt = map_add[c].size() + map_sub[c].size();
+			max_cnt = std::max(cnt, max_cnt);
+		}
+		if (max_cnt >= 2) {
+			flag = true;
+			break;
+		}
+	}
+	if (flag) {
 		math_vertex result = 0.0;
 		for (auto c0 : coeffs) {
 			double c = c0.get_value();
-			fprintf(stderr, "%e * (", c);
+			fprintf(stderr, "+ (");
 			math_vertex sum = 0.0;
 			for (int i = 0; i < map_add[c].size(); i++) {
-				sum = sum + map_add[c][i];
 				fprintf(stderr, " + %i", (map_add[c][i]).get_unique_id());
+				sum = sum + map_add[c][i];
 			}
 			for (int i = 0; i < map_sub[c].size(); i++) {
-				sum = sum - map_sub[c][i];
 				fprintf(stderr, " - %i", (map_sub[c][i]).get_unique_id());
+				sum = sum - map_sub[c][i];
 			}
-			fprintf(stderr, ")\n");
 			if (close2(c, 1.0)) {
+				fprintf(stderr, ") ");
 				result = result + sum;
 			} else {
+				fprintf(stderr, ") * %e ", c);
 				result = result + c0 * sum;
 			}
 		}
+		fprintf(stderr, "\n");
 		return result;
-	} else {
-		return *this;
 	}
+	return *this;
 }
 
 math_vertex math_vertex::optimize() {
