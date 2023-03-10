@@ -403,24 +403,27 @@ math_vertex math_vertex::distribute_muls() {
 	auto dmuls = distributive_muls();
 	std::unordered_map<double, std::vector<dag_vertex<properties>>>map_add;
 	std::unordered_map<double, std::vector<dag_vertex<properties>>>map_sub;
-	std::set<math_vertex> coeffs;
-	for (const auto& d : dmuls) {
-		if (!close2(d.c, 0.0)) {
-			if (d.c > 0.0) {
-				map_add[d.c].push_back(d.v);
-			} else {
-				map_sub[-d.c].push_back(d.v);
-			}
-			assert(consts.find(std::abs(d.c)) != consts.end());
-			coeffs.insert(consts[std::abs(d.c)]);
-//		fprintf( stderr, "%e %i, ", d.c, d.v.get_unique_id());
+	std::set<double,std::greater<double>> coeffs;
+	std::map<dag_vertex<properties>, double> cosums;
+	for( const auto& d : dmuls ) {
+		if(cosums.find(d.v) != cosums.end()) {
+			cosums[d.v] = 0.0;
 		}
-//		fprintf( stderr, "\n");
+		cosums[d.v] += d.c;
+	}
+	for(auto i = cosums.begin(); i != cosums.end(); i++) {
+		if( close2(i->second, 0.0) ) {
+			continue;
+		} else if( i->second > 0.0) {
+			map_add[i->second].push_back(i->first);
+		} else {
+			map_sub[-i->second].push_back(i->first);
+		}
+		coeffs.insert(consts[std::abs(i->second)].get_value());
 	}
 	int max_cnt = 0;
 	bool flag = false;
-	for (auto c0 : coeffs) {
-		double c = c0.get_value();
+	for (auto c : coeffs) {
 		if (!close2(c, 1.0)) {
 			const int cnt = map_add[c].size() + map_sub[c].size();
 			max_cnt = std::max(cnt, max_cnt);
@@ -432,8 +435,8 @@ math_vertex math_vertex::distribute_muls() {
 	}
 	if (flag) {
 		math_vertex result = 0.0;
-		for (auto c0 : coeffs) {
-			double c = c0.get_value();
+		for (auto c : coeffs) {
+			auto c0 = math_vertex(c);
 			fprintf(stderr, "+ (");
 			math_vertex sum = 0.0;
 			for (int i = 0; i < map_add[c].size(); i++) {
@@ -474,7 +477,9 @@ math_vertex math_vertex::optimize() {
 	}
 	switch (op) {
 	case ADD:
-		if (a.is_neg() && b.is_neg()) {
+		if (a == b) {
+			c = math_vertex(2.0) * a;
+		} else if (a.is_neg() && b.is_neg()) {
 			c = -(a.get_neg() + b.get_neg());
 		} else if (a.is_neg()) {
 			c = b - a.get_neg();
@@ -484,10 +489,14 @@ math_vertex math_vertex::optimize() {
 			c = b;
 		} else if (b.is_zero()) {
 			c = a;
+		} else if (a.get_op() == CON && b.get_op() == CON) {
+			c = math_vertex(a.get_value() + b.get_value());
 		}
 		break;
 	case SUB:
-		if (a.is_neg() && b.is_neg()) {
+		if (a == b) {
+			c = math_vertex(0.0);
+		} else if (a.is_neg() && b.is_neg()) {
 			c = b.get_neg() - a.get_neg();
 		} else if (a.is_neg()) {
 			c = -(a.get_neg() + b);
@@ -497,6 +506,8 @@ math_vertex math_vertex::optimize() {
 			c = -b;
 		} else if (b.is_zero()) {
 			c = a;
+		} else if (a.get_op() == CON && b.get_op() == CON) {
+			c = math_vertex(a.get_value() - b.get_value());
 		}
 		break;
 	case MUL:
@@ -516,6 +527,8 @@ math_vertex math_vertex::optimize() {
 			c = -b;
 		} else if (b.is_neg_one()) {
 			c = -a;
+		} else if (a.get_op() == CON && b.get_op() == CON) {
+			c = math_vertex(a.get_value() * b.get_value());
 		}
 		break;
 	case NEG:

@@ -13,12 +13,23 @@ struct cmplx {
 	cmplx operator*(cmplx other) {
 		auto tmpx = x;
 		auto tmpy = y;
-		x = tmpx * other.x - tmpy * other.y;
-		y = tmpy * other.x + tmpx * other.y;
+		if (true) {
+			x = tmpx * other.x - tmpy * other.y;
+			y = tmpy * other.x + tmpx * other.y;
+		} else {
+			auto tmpx = x;
+			auto tmpy = y;
+			auto a = (tmpx + tmpy);
+			auto b = (other.x - other.y);
+			auto c = tmpy * other.x;
+			auto d = tmpx * other.y;
+			x = a * b + d - c;
+			y = c + d;
+			y = tmpy * other.x + tmpx * other.y;
+		}
 		return *this;
 	}
 };
-
 
 std::vector<math_vertex> fft_radix2(std::vector<math_vertex> xin, int N) {
 	if (N == 1) {
@@ -46,10 +57,9 @@ std::vector<math_vertex> fft_radix2(std::vector<math_vertex> xin, int N) {
 		xout[2 * (k + N / 2)] = even[2 * k] - tr;
 		xout[2 * k + 1] = even[2 * k + 1] + ti;
 		xout[2 * (k + N / 2) + 1] = even[2 * k + 1] - ti;
-		}
+	}
 	return xout;
 }
-
 
 std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, int N) {
 	if (N == 1) {
@@ -90,8 +100,6 @@ std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, in
 	}
 	return xout;
 }
-
-/*
 
 std::vector<math_vertex> fft_radix4(std::vector<math_vertex> xin, int N) {
 	if (N == 1) {
@@ -169,4 +177,3 @@ std::vector<math_vertex> fft_radix4(std::vector<math_vertex> xin, int N) {
 	}
 	return xout;
 }
-}*/
