@@ -25,14 +25,18 @@ bool is_arithmetic(operation_t op);
 
 class cse_database;
 
+class math_vertex;
+
 class math_vertex {
 public:
 	class value_number {
 		operation_t op;
+		int sgn;
 		assoc_set x;
 		friend class math_vertex;
 	public:
 		bool operator==(const value_number& other) const;
+		value_number operator-() const;
 		value_number();
 		std::string to_string() const;
 	};
@@ -63,10 +67,15 @@ public:
 		int mul;
 		int neg;
 	};
+	struct distrib_t {
+		double c;
+		dag_vertex<properties> v;
+	};
 	math_vertex(const weak_ref& ref);
 	bool operator<(const math_vertex& other) const;
 	bool operator==(const math_vertex& other) const;
 	math_vertex optimize();
+	math_vertex distribute_muls();
 	~math_vertex();
 	bool is_neg() const;
 	math_vertex get_neg() const;
@@ -86,11 +95,14 @@ public:
 	int get_edge_count() const;
 	void set_value_number(value_number&&);
 	assoc_set associative_adds() const;
-	assoc_set associative_muls() const;
+	std::vector<distrib_t> distributive_muls();
+	std::pair<assoc_set, int> associative_muls() const;
 	void replace_edge(const math_vertex&, math_vertex&&);
 	math_vertex& operator+=(const math_vertex& other);
 	math_vertex& operator-=(const math_vertex& other);
 	math_vertex& operator*=(const math_vertex& other);
+	operation_t get_op() const;
+	double get_value() const;
 	op_cnt_t operation_count(dag_vertex<properties>::executor&);
 	std::string execute(dag_vertex<properties>::executor& exe);
 	static math_vertex new_input(std::shared_ptr<name_server> db, std::string&& name);
