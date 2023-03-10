@@ -18,7 +18,7 @@
 #include <stack>
 
 typedef enum {
-	ADD, SUB, NEG, MUL, IN, CON
+	ADD, SUB, NEG, MUL, IN, CON, INVALID
 } operation_t;
 
 bool is_arithmetic(operation_t op);
@@ -58,6 +58,11 @@ public:
 	struct value_key {
 		size_t operator()( const value_number& value ) const;
 	};
+	struct op_cnt_t {
+		int add;
+		int mul;
+		int neg;
+	};
 	math_vertex(const weak_ref& ref);
 	bool operator<(const math_vertex& other) const;
 	bool operator==(const math_vertex& other) const;
@@ -86,8 +91,10 @@ public:
 	math_vertex& operator+=(const math_vertex& other);
 	math_vertex& operator-=(const math_vertex& other);
 	math_vertex& operator*=(const math_vertex& other);
+	op_cnt_t operation_count(dag_vertex<properties>::executor&);
 	std::string execute(dag_vertex<properties>::executor& exe);
 	static math_vertex new_input(std::shared_ptr<name_server> db, std::string&& name);
+	static op_cnt_t operation_count(std::vector<math_vertex>&);
 	static std::vector<math_vertex> new_inputs(int cnt);
 	static std::string execute_all(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);

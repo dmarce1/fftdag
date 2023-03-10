@@ -193,7 +193,6 @@ math_vertex::math_vertex(double constant) {
 	} else {
 		*this = -math_vertex(-constant);
 	}
-	check_cse();
 }
 
 math_vertex& math_vertex::operator=(double constant) {
@@ -262,6 +261,34 @@ std::string math_vertex::execute(dag_vertex<properties>::executor& exe) {
 	return code;
 }
 
+math_vertex::op_cnt_t math_vertex::operation_count(dag_vertex<properties>::executor& exe) {
+	op_cnt_t cnt;
+	cnt.add = cnt.mul = cnt.neg = 0;
+	v.execute(exe, [&cnt](properties& in, const std::vector<properties>& edges) {
+		if(is_additive(in.op)) {
+			cnt.add++;
+		} else if( in.op == MUL) {
+			cnt.mul++;
+		} else if( in.op == NEG) {
+			cnt.neg++;
+		}
+	});
+	return cnt;
+}
+
+math_vertex::op_cnt_t math_vertex::operation_count(std::vector<math_vertex>& outputs) {
+	op_cnt_t cnt;
+	cnt.add = cnt.mul = cnt.neg = 0;
+	dag_vertex<properties>::executor exe(false);
+	for (int n = 0; n < outputs.size(); n++) {
+		auto this_cnt = outputs[n].operation_count(exe);
+		cnt.add += this_cnt.add;
+		cnt.mul += this_cnt.mul;
+		cnt.neg += this_cnt.neg;
+	}
+	return cnt;
+}
+
 std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 	std::string code;
 	dag_vertex<properties>::executor exe;
@@ -313,7 +340,6 @@ bool math_vertex::check_cse() {
 		cse[vn] = *this;
 		return false;
 	} else {
-		fprintf(stderr, "%s\n", vn.to_string().c_str());
 		*this = cse[vn];
 		return true;
 	}
@@ -438,7 +464,7 @@ assoc_set math_vertex::associative_adds() const {
 	if (is_additive(op)) {
 		adds = get_edge_in(0).associative_adds();
 		if (op == ADD) {
-			adds = adds + get_edge_in(0).associative_adds();
+			adds = adds + get_edge_in(1).associative_adds();
 		} else {
 			adds = adds - get_edge_in(1).associative_adds();
 		}

@@ -39,16 +39,22 @@ public:
 			return std::shared_ptr<state>(a).get() == std::shared_ptr<state>(b).get();
 		}
 	};
-	using executor = std::unordered_map<std::weak_ptr<state>, bool, key, equal>;
+	struct executor {
+		std::unordered_map<std::weak_ptr<state>, bool, key, equal> touched;
+		bool free;
+		executor(bool f = true) {
+			free = f;
+		}
+	};
 private:
-	void sort(executor& touched, std::vector<dag_vertex>& vertices) const {
+	void sort(executor& exe, std::vector<dag_vertex>& vertices) const {
 		const auto& edges_in = state_ptr->edges_in;
 		for (const auto& e : edges_in) {
-			e.sort(touched, vertices);
+			e.sort(exe, vertices);
 		}
-		if (!touched[state_ptr]) {
+		if (!exe.touched[state_ptr]) {
 			vertices.push_back(*this);
-			touched[state_ptr] = true;
+			exe.touched[state_ptr] = true;
 		}
 	}
 public:
@@ -74,19 +80,21 @@ public:
 		next_id++;
 		return std::move(v);
 	}
-	void execute(executor& touched, const function_type& func) {
-		if (!touched[state_ptr]) {
+	void execute(executor& exe, const function_type& func) {
+		if (!exe.touched[state_ptr]) {
 			std::vector<Properties> props;
 			auto& edges_in = state_ptr->edges_in;
 			for (auto& e : edges_in) {
-				e.execute(touched, func);
+				e.execute(exe, func);
 			}
 			for (const auto& e : edges_in) {
 				props.push_back(e.properties());
 			}
 			func(state_ptr->props, std::move(props));
-			state_ptr->edges_in = std::vector<dag_vertex>();
-			touched[state_ptr] = true;
+			if (exe.free) {
+				state_ptr->edges_in.clear();
+			}
+			exe.touched[state_ptr] = true;
 		}
 	}
 	std::vector<dag_vertex> sort() {
