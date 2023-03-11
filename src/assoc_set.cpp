@@ -34,7 +34,7 @@ assoc_set operator+(const assoc_set& A, const assoc_set& B) {
 			C.counts[i.first] = 0;
 		}
 		C.counts[i.first] += i.second;
-		if( C.counts[i.first] == 0 ) {
+		if (C.counts[i.first] == 0) {
 			C.counts.erase(i.first);
 		}
 	}
@@ -43,6 +43,10 @@ assoc_set operator+(const assoc_set& A, const assoc_set& B) {
 
 size_t assoc_set::size() const {
 	return counts.size();
+}
+
+void assoc_set::clear() {
+	counts.clear();
 }
 
 assoc_set operator-(const assoc_set& A, const assoc_set& B) {
@@ -55,7 +59,7 @@ assoc_set operator-(const assoc_set& A, const assoc_set& B) {
 			C.counts[i.first] = 0;
 		}
 		C.counts[i.first] -= i.second;
-		if( C.counts[i.first] == 0 ) {
+		if (C.counts[i.first] == 0) {
 			C.counts.erase(i.first);
 		}
 	}
@@ -83,6 +87,14 @@ assoc_set operator-(const assoc_set& A) {
 	return B;
 }
 
+std::string assoc_set::to_string() const {
+	std::string rc;
+	for (auto i = begin(); i != end(); i++) {
+		rc += ((i->second > 0) ? std::string("+") : std::string("-")) + std::to_string(std::abs(i->second)) + "*(" + std::to_string(i->first) + ") ";
+	}
+	return rc;
+}
+
 bool assoc_set::operator==(const assoc_set& other) const {
 	return counts == other.counts;
 }
@@ -104,7 +116,8 @@ bool assoc_set::is_null() const {
 }
 
 bool assoc_set::is_subset_of(const assoc_set& A) const {
-	return counts.size() == (*this + A).counts.size();
+	auto B = (*this + A);
+	return A.counts.size() >= B.counts.size();
 }
 
 bool assoc_set::is_superset_of(const assoc_set& A) const {

@@ -136,7 +136,7 @@ void math_vertex::set_database(const std::shared_ptr<name_server>& db) {
 	if (v.properties().names == nullptr && db != nullptr) {
 		if (is_arithmetic(v.properties().op)) {
 			v.properties().names = db;
-			for (int i = 0; i < v.get_edge_count(); i++) {
+			for (int i = 0; i < v.get_edge_in_count(); i++) {
 				get_edge_in(i).set_database(db);
 			}
 		}
@@ -158,6 +158,9 @@ math_vertex math_vertex::binary_op(operation_t op, math_vertex A, math_vertex B)
 	C = C.distribute_muls();
 	C = C.optimize();
 	C.check_cse();
+	if (is_additive(op)) {
+		C = C.associate_adds();
+	}
 	return std::move(C);
 }
 
@@ -332,16 +335,25 @@ math_vertex math_vertex::get_edge_in(int i) const {
 	return math_vertex(v.get_edge_in(i));
 }
 
-int math_vertex::get_edge_count() const {
-	return v.get_edge_count();
+int math_vertex::get_edge_in_count() const {
+	return v.get_edge_in_count();
+}
+
+math_vertex math_vertex::get_edge_out(int i) const {
+	return math_vertex(v.get_edge_out(i));
+}
+
+int math_vertex::get_edge_out_count() const {
+	return v.get_edge_out_count();
 }
 
 bool math_vertex::check_cse() {
 	value_number vn;
 	const auto op = v.properties().op;
 	vn.op = op;
+	auto add_set = associative_adds();
 	if (is_additive(op)) {
-		vn.x = associative_adds();
+		vn.x = add_set;
 	} else if (op == MUL) {
 		vn.x = associative_muls().first;
 	} else {
@@ -349,9 +361,10 @@ bool math_vertex::check_cse() {
 	}
 	bool pos = (cse.find(vn) != cse.end());
 	bool neg = !pos && (cse.find(-vn) != cse.end());
+	auto wref = weak_ref(*this);
 	if (!pos && !neg) {
 		value_number* ptr = new value_number(vn);
-		v.properties().vnum = std::shared_ptr<value_number>(ptr, [](value_number* vptr) {
+		v.properties().vnum = std::shared_ptr<value_number>(ptr, [add_set,wref,vn](value_number* vptr) {
 			cse.erase(*vptr);
 			delete vptr;
 		});
@@ -399,22 +412,85 @@ math_vertex math_vertex::get_neg() const {
 		return *this;
 	}
 }
+
+math_vertex math_vertex::associate_adds() {
+	if (is_additive(get_op())) {
+		const auto basis = collect_additive_terms();
+		fprintf( stderr, "\n");
+		fprintf( stderr, "%s\n", v.properties().vnum->to_string().c_str());
+		fprintf( stderr, "---------------------------------\n");
+		for (auto b : basis) {
+			if (b.v.properties().vnum) {
+				value_number vnum = *(b.v.properties().vnum);
+				if (!is_additive(b.get_op())) {
+					vnum.x.clear();
+					vnum.x.insert(b.v.get_unique_id());
+				}
+				if (vnum.x.is_subset_of(v.properties().vnum->x)) {
+					fprintf( stderr, "%s\n", vnum.to_string().c_str());
+				}
+			}
+		}
+	}
+	return *this;
+}
+
+std::vector<math_vertex> math_vertex::collect_additive_terms() {
+	std::unordered_set<int> path;
+	return collect_additive_terms_down(path);
+}
+
+std::vector<math_vertex> math_vertex::collect_additive_terms_down(std::unordered_set<int>& path) {
+	std::vector<math_vertex> terms;
+	if (!is_additive(get_op())) {
+		terms = collect_additive_terms_up(path);
+		terms.push_back(*this);
+		for (int i = 0; i < get_edge_out_count(); i++) {
+			if (path.find(get_edge_out(i).v.get_unique_id()) == path.end()) {
+				auto tmp = get_edge_out(i).collect_additive_terms_up(path);
+				terms.insert(terms.end(), tmp.begin(), tmp.end());
+			}
+		}
+	} else {
+		for (int i = 0; i < get_edge_in_count(); i++) {
+			path.insert(v.get_unique_id());
+			auto tmp = get_edge_in(i).collect_additive_terms_down(path);
+			terms.insert(terms.end(), tmp.begin(), tmp.end());
+		}
+	}
+	return std::move(terms);
+}
+
+std::vector<math_vertex> math_vertex::collect_additive_terms_up(std::unordered_set<int>& path) {
+	std::vector<math_vertex> terms;
+	if (is_additive(get_op())) {
+		terms.push_back(*this);
+		for (int i = 0; i < get_edge_out_count(); i++) {
+			if (path.find(get_edge_out(i).v.get_unique_id()) == path.end()) {
+				auto tmp = get_edge_out(i).collect_additive_terms_up(path);
+				terms.insert(terms.end(), tmp.begin(), tmp.end());
+			}
+		}
+	}
+	return std::move(terms);
+}
+
 math_vertex math_vertex::distribute_muls() {
 	auto dmuls = distributive_muls();
 	std::unordered_map<double, std::vector<dag_vertex<properties>>>map_add;
 	std::unordered_map<double, std::vector<dag_vertex<properties>>>map_sub;
-	std::set<double,std::greater<double>> coeffs;
+	std::set<double, std::greater<double>> coeffs;
 	std::map<dag_vertex<properties>, double> cosums;
-	for( const auto& d : dmuls ) {
-		if(cosums.find(d.v) != cosums.end()) {
+	for (const auto& d : dmuls) {
+		if (cosums.find(d.v) != cosums.end()) {
 			cosums[d.v] = 0.0;
 		}
 		cosums[d.v] += d.c;
 	}
-	for(auto i = cosums.begin(); i != cosums.end(); i++) {
-		if( close2(i->second, 0.0) ) {
+	for (auto i = cosums.begin(); i != cosums.end(); i++) {
+		if (close2(i->second, 0.0)) {
 			continue;
-		} else if( i->second > 0.0) {
+		} else if (i->second > 0.0) {
 			map_add[i->second].push_back(i->first);
 		} else {
 			map_sub[-i->second].push_back(i->first);
@@ -437,25 +513,19 @@ math_vertex math_vertex::distribute_muls() {
 		math_vertex result = 0.0;
 		for (auto c : coeffs) {
 			auto c0 = math_vertex(c);
-			fprintf(stderr, "+ (");
 			math_vertex sum = 0.0;
 			for (int i = 0; i < map_add[c].size(); i++) {
-				fprintf(stderr, " + %i", (map_add[c][i]).get_unique_id());
 				sum = sum + map_add[c][i];
 			}
 			for (int i = 0; i < map_sub[c].size(); i++) {
-				fprintf(stderr, " - %i", (map_sub[c][i]).get_unique_id());
 				sum = sum - map_sub[c][i];
 			}
 			if (close2(c, 1.0)) {
-				fprintf(stderr, ") ");
 				result = result + sum;
 			} else {
-				fprintf(stderr, ") * %e ", c);
 				result = result + c0 * sum;
 			}
 		}
-		fprintf(stderr, "\n");
 		return result;
 	}
 	return *this;

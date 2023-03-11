@@ -15,6 +15,7 @@
 
 #include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <stack>
 
 typedef enum {
@@ -60,7 +61,7 @@ public:
 		friend class math_vertex;
 	};
 	struct value_key {
-		size_t operator()( const value_number& value ) const;
+		size_t operator()(const value_number& value) const;
 	};
 	struct op_cnt_t {
 		int add;
@@ -76,6 +77,7 @@ public:
 	bool operator==(const math_vertex& other) const;
 	math_vertex optimize();
 	math_vertex distribute_muls();
+	math_vertex associate_adds();
 	~math_vertex();
 	bool is_neg() const;
 	math_vertex get_neg() const;
@@ -91,8 +93,10 @@ public:
 	math_vertex(dag_vertex<properties> && v);
 	math_vertex(double constant);
 	math_vertex& operator=(double constant);
+	math_vertex get_edge_out(int i) const;
+	int get_edge_out_count() const;
 	math_vertex get_edge_in(int i) const;
-	int get_edge_count() const;
+	int get_edge_in_count() const;
 	void set_value_number(value_number&&);
 	assoc_set associative_adds() const;
 	std::vector<distrib_t> distributive_muls();
@@ -101,6 +105,9 @@ public:
 	math_vertex& operator+=(const math_vertex& other);
 	math_vertex& operator-=(const math_vertex& other);
 	math_vertex& operator*=(const math_vertex& other);
+	std::vector<math_vertex> collect_additive_terms();
+	std::vector<math_vertex> collect_additive_terms_up(std::unordered_set<int>& path);
+	std::vector<math_vertex> collect_additive_terms_down(std::unordered_set<int>& path);
 	operation_t get_op() const;
 	double get_value() const;
 	op_cnt_t operation_count(dag_vertex<properties>::executor&);

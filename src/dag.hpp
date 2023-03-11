@@ -23,6 +23,7 @@ private:
 		int id;
 		Properties props;
 		std::vector<dag_vertex> edges_in;
+		std::vector<dag_vertex> edges_out;
 	};
 	std::shared_ptr<state> state_ptr;
 	static int next_id;
@@ -60,10 +61,18 @@ private:
 public:
 	class weak_ref {
 		std::weak_ptr<state> ptr;
+		int id;
 	public:
 		weak_ref() = default;
 		weak_ref(const dag_vertex& v) {
 			ptr = v.state_ptr;
+			id = v.state_ptr->id;
+		}
+		bool operator<(const weak_ref& other) const {
+			return id < other.id;
+		}
+		bool operator==(const weak_ref& other) const {
+			return id == other.id;
 		}
 		friend class dag_vertex;
 	};
@@ -80,6 +89,13 @@ public:
 		next_id++;
 		return std::move(v);
 	}
+	void free_edges() {
+		auto& edges_in = state_ptr->edges_in;
+		while (edges_in.size()) {
+			edges_in.back().remove_edge_out(*this);
+			edges_in.pop_back();
+		}
+	}
 	void execute(executor& exe, const function_type& func) {
 		if (!exe.touched[state_ptr]) {
 			std::vector<Properties> props;
@@ -92,7 +108,7 @@ public:
 			}
 			func(state_ptr->props, std::move(props));
 			if (exe.free) {
-				state_ptr->edges_in.clear();
+				free_edges();
 			}
 			exe.touched[state_ptr] = true;
 		}
@@ -125,13 +141,27 @@ public:
 	bool operator!=(void* ptr) {
 		return ptr == nullptr && state_ptr != nullptr;
 	}
-	void add_edge_in(const dag_vertex& v) {
+	void add_edge_out(const dag_vertex& v) {
+		state_ptr->edges_out.push_back(v);
+	}
+	void add_edge_in(dag_vertex& v) {
 		state_ptr->edges_in.push_back(v);
+		v.add_edge_out(*this);
+	}
+	void remove_edge_out(const dag_vertex& v) {
+		auto& edges_out = state_ptr->edges_out;
+		for (int i = 0; i < edges_out.size(); i++) {
+			if (edges_out[i] == v) {
+				edges_out[i] = edges_out.back();
+				edges_out.pop_back();
+			}
+		}
 	}
 	void remove_edge_in(const dag_vertex& v) {
 		auto& edges_in = state_ptr->edges_in;
 		for (int i = 0; i < edges_in.size(); i++) {
 			if (edges_in[i] == v) {
+				edges_in[i].remove_edge_out(*this);
 				for (int j = i; j < edges_in.size() - 1; j++) {
 					edges_in[j] = edges_in[j + 1];
 				}
@@ -144,13 +174,21 @@ public:
 	dag_vertex get_edge_in(int i) const {
 		return state_ptr->edges_in[i];
 	}
-	int get_edge_count() const {
+	int get_edge_in_count() const {
 		return state_ptr->edges_in.size();
+	}
+	dag_vertex get_edge_out(int i) const {
+		return state_ptr->edges_out[i];
+	}
+	int get_edge_out_count() const {
+		return state_ptr->edges_out.size();
 	}
 	void replace_edge_in(const dag_vertex& v, dag_vertex&& u) {
 		for (auto& edge : state_ptr->edges_in) {
 			if (edge == v) {
+				edge.remove_edge_out(*this);
 				edge = std::move(u);
+				edge.add_edge_out(*this);
 				return;
 			}
 		}
