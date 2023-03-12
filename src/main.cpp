@@ -121,6 +121,7 @@ int test() {
 //	auto outputs = fft_radix4(inputs, N);
 //	auto outputs = fft_radix2(inputs, N);
 	auto outputs = fft_prime_power(3, inputs, N);
+	math_vertex::optimize(outputs);
 	print_code1(N);
 	auto cnt = math_vertex::operation_count(outputs);
 	auto code = math_vertex::execute_all(outputs);

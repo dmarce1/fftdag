@@ -47,6 +47,7 @@ public:
 		name_server::name_ptr name;
 		double value;
 		int out_num;
+		bool cse;
 		std::shared_ptr<value_number> vnum;
 		std::string print_code(const std::vector<properties>& edges);
 		properties();
@@ -71,6 +72,9 @@ public:
 	struct distrib_t {
 		double c;
 		dag_vertex<properties> v;
+	};
+	struct key {
+		size_t operator()(const math_vertex&) const;
 	};
 	math_vertex(const weak_ref& ref);
 	bool operator<(const math_vertex& other) const;
@@ -105,10 +109,11 @@ public:
 	math_vertex& operator+=(const math_vertex& other);
 	math_vertex& operator-=(const math_vertex& other);
 	math_vertex& operator*=(const math_vertex& other);
-	std::vector<math_vertex> collect_additive_terms();
-	std::vector<math_vertex> collect_additive_terms_up(std::unordered_set<int>& path);
-	std::vector<math_vertex> collect_additive_terms_down(std::unordered_set<int>& path);
+	std::unordered_set<math_vertex, key> collect_additive_terms(std::unordered_set<math_vertex, key>&);
+	std::unordered_set<math_vertex, key> collect_additive_terms_up(std::unordered_set<math_vertex, key>& path);
+	std::unordered_set<math_vertex, key> collect_additive_terms_down(std::unordered_set<math_vertex, key>& path);
 	operation_t get_op() const;
+	math_vertex post_optimize();
 	double get_value() const;
 	op_cnt_t operation_count(dag_vertex<properties>::executor&);
 	std::string execute(dag_vertex<properties>::executor& exe);
@@ -116,15 +121,22 @@ public:
 	static op_cnt_t operation_count(std::vector<math_vertex>&);
 	static std::vector<math_vertex> new_inputs(int cnt);
 	static std::string execute_all(std::vector<math_vertex>& vertices);
+	static void optimize(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator*(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A);
+	struct cse_entry {
+		math_vertex::weak_ref ptr;
+		bool vacate;
+		cse_entry();
+		cse_entry& operator=(const math_vertex&);
+	};
 private:
 	dag_vertex<properties> v;
 	bool check_cse();
 	static std::map<double, math_vertex> consts;
-	static std::unordered_map<value_number, math_vertex::weak_ref, value_key> cse;
+	static std::unordered_map<value_number, cse_entry, value_key> cse;
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);
 	static math_vertex unary_op(operation_t op, math_vertex A);
 	void set_database(const std::shared_ptr<name_server>& db);

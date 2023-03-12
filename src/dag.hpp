@@ -127,10 +127,16 @@ public:
 		return state_ptr->id;
 	}
 	bool operator==(const dag_vertex& v) const {
-		return state_ptr->id == v.state_ptr->id;
+		if (!state_ptr && !v.state_ptr) {
+			return true;
+		} else if (state_ptr && v.state_ptr) {
+			return state_ptr->id == v.state_ptr->id;
+		} else {
+			return false;
+		}
 	}
 	bool operator!=(const dag_vertex& v) const {
-		return state_ptr->id != v.state_ptr->id;
+		return !operator==(v);
 	}
 	bool operator<(const dag_vertex& v) const {
 		return state_ptr->id < v.state_ptr->id;

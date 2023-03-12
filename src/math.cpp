@@ -91,6 +91,7 @@ std::string math_vertex::value_number::to_string() const {
 
 math_vertex::properties::properties() {
 	out_num = -1;
+	cse = false;
 }
 
 std::string math_vertex::properties::print_code(const std::vector<properties>& edges) {
@@ -158,10 +159,27 @@ math_vertex math_vertex::binary_op(operation_t op, math_vertex A, math_vertex B)
 	C = C.distribute_muls();
 	C = C.optimize();
 	C.check_cse();
-	if (is_additive(op)) {
-		C = C.associate_adds();
-	}
 	return std::move(C);
+}
+
+math_vertex math_vertex::post_optimize() {
+	for (int i = 0; i < get_edge_in_count(); i++) {
+		auto new_edge = get_edge_in(i).post_optimize();
+		v.replace_edge_in(get_edge_in(i).v, std::move(new_edge.v));
+	}
+	math_vertex rc;
+	if (is_additive(get_op())) {
+		rc = associate_adds();
+	} else {
+		rc = *this;
+	}
+	return rc;
+}
+
+void math_vertex::optimize(std::vector<math_vertex>& vertices) {
+	for (auto& v : vertices) {
+		v = v.post_optimize();
+	}
 }
 
 math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
@@ -359,25 +377,55 @@ bool math_vertex::check_cse() {
 	} else {
 		vn.x.insert(v.get_unique_id());
 	}
-	bool pos = (cse.find(vn) != cse.end());
-	bool neg = !pos && (cse.find(-vn) != cse.end());
-	auto wref = weak_ref(*this);
+	bool pos = false;
+	bool neg = false;
+	auto piter = cse.find(vn);
+	decltype(piter) niter;
+	math_vertex vacate;
+	if (piter != cse.end()) {
+		if (piter->second.vacate) {
+			vacate = piter->second.ptr;
+		} else {
+			pos = true;
+		}
+	} else {
+		niter = cse.find(-vn);
+		if (niter != cse.end()) {
+			if (niter->second.vacate) {
+				vacate = niter->second.ptr;
+			} else {
+				neg = true;
+			}
+		}
+	}
+	if (vacate.v != math_vertex().v) {
+		vacate.v.properties().cse = false;
+	}
 	if (!pos && !neg) {
 		value_number* ptr = new value_number(vn);
-		v.properties().vnum = std::shared_ptr<value_number>(ptr, [add_set,wref,vn](value_number* vptr) {
-			cse.erase(*vptr);
+		v.properties().cse = true;
+		bool* cse_ptr = &(v.properties().cse);
+		v.properties().vnum = std::shared_ptr<value_number>(ptr, [cse_ptr](value_number* vptr) {
+			if( *cse_ptr ) {
+				cse.erase(*vptr);
+			}
 			delete vptr;
 		});
 		cse[vn] = *this;
 		return false;
 	} else {
 		if (pos) {
-			*this = cse[vn];
+			*this = cse[vn].ptr;
 		} else {
-			*this = -cse[-vn];
+			*this = -cse[-vn].ptr;
 		}
 		return true;
 	}
+}
+
+math_vertex::cse_entry& math_vertex::cse_entry::operator=(const math_vertex& v) {
+	ptr = v;
+	return *this;
 }
 
 bool math_vertex::is_zero() const {
@@ -414,61 +462,119 @@ math_vertex math_vertex::get_neg() const {
 }
 
 math_vertex math_vertex::associate_adds() {
+	math_vertex rc = *this;
 	if (is_additive(get_op())) {
-		const auto basis = collect_additive_terms();
-		fprintf( stderr, "\n");
-		fprintf( stderr, "%s\n", v.properties().vnum->to_string().c_str());
-		fprintf( stderr, "---------------------------------\n");
-		for (auto b : basis) {
-			if (b.v.properties().vnum) {
-				value_number vnum = *(b.v.properties().vnum);
-				if (!is_additive(b.get_op())) {
-					vnum.x.clear();
-					vnum.x.insert(b.v.get_unique_id());
+		std::unordered_set<math_vertex, key> path;
+		const auto basis_vertices = collect_additive_terms(path);
+		std::vector<assoc_set> basis;
+		std::vector<math_vertex> basis_vs;
+		std::vector<int> basis_sgns;
+		auto target = v.properties().vnum->x;
+		for (auto v : basis_vertices) {
+			auto vnum = (v.v.properties().vnum);
+			if (vnum) {
+				if (!is_additive(v.get_op())) {
+					vnum->x.clear();
+					vnum->x.insert(v.v.get_unique_id());
 				}
-				if (vnum.x.is_subset_of(v.properties().vnum->x)) {
-					fprintf( stderr, "%s\n", vnum.to_string().c_str());
+				if (vnum->x.is_subset_of(target)) {
+					basis.push_back(vnum->x);
+					basis.push_back(-vnum->x);
+					basis_vs.push_back(v);
+					basis_vs.push_back(v);
+					basis_sgns.push_back(1);
+					basis_sgns.push_back(-1);
+				}
+			}
+		}
+		std::vector<int> best_set;
+		int sgn = 0;
+		int n = basis.size();
+		for (auto v : path) {
+			if (v.v.properties().vnum) {
+				cse[*v.v.properties().vnum].vacate = true;
+			}
+		}
+		for (int k = 1; k < n; k++) {
+			const auto tries = nchoosek(n, k);
+			for (auto try_ : tries) {
+				assoc_set set;
+				for (auto t : try_) {
+					set = set + basis[t];
+				}
+				if (set == target) {
+					best_set = std::move(try_);
+					sgn = 1;
+					break;
+				} else if (set == -target) {
+					sgn = -1;
+					best_set = std::move(try_);
+					break;
+				}
+			}
+			if (sgn) {
+				break;
+			}
+		}
+		if (sgn && best_set.size() < target.size()) {
+			fprintf( stderr, "\n\n---------------------------------\n\n");
+			fprintf( stderr, "%s\n", v.properties().vnum->to_string().c_str());
+			fprintf( stderr, "---------------------------------\n");
+			for (auto b : best_set) {
+				fprintf( stderr, "%s\n", basis[b].to_string().c_str());
+			}
+			fprintf( stderr, "---------------------------------\n\n");
+			rc = 0.0;
+			for (auto i : best_set) {
+				auto this_sgn = sgn * basis_sgns[i];
+				if (this_sgn > 0) {
+					rc = rc + basis_vs[i];
+				} else {
+					rc = rc - basis_vs[i];
 				}
 			}
 		}
 	}
-	return *this;
+	return rc;
 }
 
-std::vector<math_vertex> math_vertex::collect_additive_terms() {
-	std::unordered_set<int> path;
+std::unordered_set<math_vertex, math_vertex::key> math_vertex::collect_additive_terms(std::unordered_set<math_vertex, key>& path) {
 	return collect_additive_terms_down(path);
 }
 
-std::vector<math_vertex> math_vertex::collect_additive_terms_down(std::unordered_set<int>& path) {
-	std::vector<math_vertex> terms;
+size_t math_vertex::key::operator()(const math_vertex& v) const {
+	return v.v.get_unique_id();
+}
+
+std::unordered_set<math_vertex, math_vertex::key> math_vertex::collect_additive_terms_down(std::unordered_set<math_vertex, key>& path) {
+	std::unordered_set<math_vertex, key> terms;
 	if (!is_additive(get_op())) {
 		terms = collect_additive_terms_up(path);
-		terms.push_back(*this);
+		terms.insert(*this);
 		for (int i = 0; i < get_edge_out_count(); i++) {
-			if (path.find(get_edge_out(i).v.get_unique_id()) == path.end()) {
+			if (path.find(get_edge_out(i)) == path.end()) {
 				auto tmp = get_edge_out(i).collect_additive_terms_up(path);
-				terms.insert(terms.end(), tmp.begin(), tmp.end());
+				terms.insert(tmp.begin(), tmp.end());
 			}
 		}
 	} else {
 		for (int i = 0; i < get_edge_in_count(); i++) {
-			path.insert(v.get_unique_id());
+			path.insert(v);
 			auto tmp = get_edge_in(i).collect_additive_terms_down(path);
-			terms.insert(terms.end(), tmp.begin(), tmp.end());
+			terms.insert(tmp.begin(), tmp.end());
 		}
 	}
 	return std::move(terms);
 }
 
-std::vector<math_vertex> math_vertex::collect_additive_terms_up(std::unordered_set<int>& path) {
-	std::vector<math_vertex> terms;
+std::unordered_set<math_vertex, math_vertex::key> math_vertex::collect_additive_terms_up(std::unordered_set<math_vertex, key>& path) {
+	std::unordered_set<math_vertex, key> terms;
 	if (is_additive(get_op())) {
-		terms.push_back(*this);
+		terms.insert(*this);
 		for (int i = 0; i < get_edge_out_count(); i++) {
-			if (path.find(get_edge_out(i).v.get_unique_id()) == path.end()) {
+			if (path.find(get_edge_out(i)) == path.end()) {
 				auto tmp = get_edge_out(i).collect_additive_terms_up(path);
-				terms.insert(terms.end(), tmp.begin(), tmp.end());
+				terms.insert(tmp.begin(), tmp.end());
 			}
 		}
 	}
@@ -691,6 +797,10 @@ std::vector<math_vertex::distrib_t> math_vertex::distributive_muls() {
 	return std::move(muls);
 }
 
+math_vertex::cse_entry::cse_entry() {
+	vacate = false;
+}
+
 std::pair<assoc_set, int> math_vertex::associative_muls() const {
 	std::pair<assoc_set, int> muls;
 	const auto op = v.properties().op;
@@ -710,5 +820,5 @@ std::pair<assoc_set, int> math_vertex::associative_muls() const {
 	return std::move(muls);
 }
 
-std::unordered_map<math_vertex::value_number, math_vertex::weak_ref, math_vertex::value_key> math_vertex::cse;
+std::unordered_map<math_vertex::value_number, math_vertex::cse_entry, math_vertex::value_key> math_vertex::cse;
 std::map<double, math_vertex> math_vertex::consts;
