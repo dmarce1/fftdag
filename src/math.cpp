@@ -176,11 +176,6 @@ math_vertex math_vertex::post_optimize() {
 	return rc;
 }
 
-void math_vertex::optimize(std::vector<math_vertex>& vertices) {
-	for (auto& v : vertices) {
-		v = v.post_optimize();
-	}
-}
 
 math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 	properties props;
@@ -197,6 +192,12 @@ math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 	return std::move(C);
 }
 
+
+void math_vertex::optimize(std::vector<math_vertex>& vertices) {
+	for (auto& v : vertices) {
+		v = v.post_optimize();
+	}
+}
 math_vertex::~math_vertex() {
 
 }
@@ -462,6 +463,11 @@ math_vertex math_vertex::get_neg() const {
 }
 
 math_vertex math_vertex::associate_adds() {
+
+
+	return optimize();
+
+
 	math_vertex rc = *this;
 	if (is_additive(get_op())) {
 		std::unordered_set<math_vertex, key> path;
@@ -797,6 +803,16 @@ std::vector<math_vertex::distrib_t> math_vertex::distributive_muls() {
 	return std::move(muls);
 }
 
+math_vertex::math_vertex() {
+	if( !first_init) {
+		first_init = true;
+		essential_constants.resize(3);
+		essential_constants[0] = (math_vertex(0.0));
+		essential_constants[1] = (math_vertex(1.0));
+		essential_constants[2] = (math_vertex(-1.0));
+	}
+}
+
 math_vertex::cse_entry::cse_entry() {
 	vacate = false;
 }
@@ -821,4 +837,6 @@ std::pair<assoc_set, int> math_vertex::associative_muls() const {
 }
 
 std::unordered_map<math_vertex::value_number, math_vertex::cse_entry, math_vertex::value_key> math_vertex::cse;
+std::vector<math_vertex> math_vertex::essential_constants;
 std::map<double, math_vertex> math_vertex::consts;
+bool math_vertex::first_init = false;

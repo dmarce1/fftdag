@@ -88,7 +88,7 @@ public:
 	bool is_zero() const;
 	bool is_one() const;
 	bool is_neg_one() const;
-	math_vertex() = default;
+	math_vertex();
 	math_vertex(const math_vertex&v) = default;
 	math_vertex(math_vertex&& v) = default;
 	math_vertex& operator=(const math_vertex&v) = default;
@@ -135,10 +135,12 @@ public:
 private:
 	dag_vertex<properties> v;
 	bool check_cse();
+	static bool first_init;
 	static std::map<double, math_vertex> consts;
 	static std::unordered_map<value_number, cse_entry, value_key> cse;
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);
 	static math_vertex unary_op(operation_t op, math_vertex A);
+	static std::vector<math_vertex> essential_constants;
 	void set_database(const std::shared_ptr<name_server>& db);
 };
 

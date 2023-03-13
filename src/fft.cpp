@@ -31,6 +31,116 @@ struct cmplx {
 	}
 };
 
+std::vector<math_vertex> fft_singleton(std::vector<math_vertex> xin, int N) {
+	const int M = (N - 1) / 2;
+	std::vector<math_vertex> xout(2 * N);
+	std::vector<math_vertex> tp(M + 1);
+	std::vector<math_vertex> tm(M + 1);
+	std::vector<math_vertex> up(M + 1);
+	std::vector<math_vertex> um(M + 1);
+	std::vector<math_vertex> ap(M + 1);
+	std::vector<math_vertex> am(M + 1);
+	std::vector<math_vertex> bp(M + 1);
+	std::vector<math_vertex> bm(M + 1);
+	std::vector<std::vector<bool>> pc(M + 1, std::vector<bool>(M + 1, false));
+	std::vector<bool> xc(M + 1, false);
+	for (int j = 1; j <= M; j++) {
+		tp[j] = xin[2 * j] + xin[2 * (N - j)];
+		tm[j] = xin[2 * j] - xin[2 * (N - j)];
+		up[j] = xin[2 * j + 1] + xin[2 * (N - j) + 1];
+		um[j] = xin[2 * j + 1] - xin[2 * (N - j) + 1];
+	}
+	for (int i = 1; i <= M; i++) {
+		am[i] = 0.0;
+		bm[i] = 0.0;
+		ap[i] = 0.0;
+		bp[i] = 0.0;
+	}
+	xout[0] = math_vertex(0.0);
+	xout[1] = math_vertex(0.0);
+	std::vector<bool> first(M + 1, true);
+	for (int i0 = 1; i0 <= M; i0++) {
+		for (int j0 = 1; j0 <= M; j0++) {
+			for (int i1 = i0 + 1; i1 <= M; i1++) {
+				for (int j1 = j0 + 1; j1 <= M; j1++) {
+					{
+						double c00 = cos(2.0 * M_PI * i0 * j0 / N);
+						double c10 = cos(2.0 * M_PI * i1 * j0 / N);
+						double c01 = cos(2.0 * M_PI * i0 * j1 / N);
+						double c11 = cos(2.0 * M_PI * i1 * j1 / N);
+						if (close2(c00, c11) && close2(c10, c01)) {
+							double c0 = c00;
+							double c1 = c01;
+							math_vertex a = math_vertex(0.5 * (c0 + c1));
+							math_vertex b = math_vertex(0.5 * (c0 - c1));
+							math_vertex s0 = (tp[j0] + tp[j1]);
+							math_vertex s1 = (tp[j0] - tp[j1]);
+							math_vertex r0 = (up[j0] + up[j1]);
+							math_vertex r1 = (up[j0] - up[j1]);
+							bool f = first[i0] && first[i1];
+							auto as0 = (f ? xin[0] : math_vertex(0.0)) + a * s0;
+							auto ar0 = (f ? xin[1] : math_vertex(0.0)) + a * r0;
+							first[i0] = false;
+							first[i1] = false;
+							ap[i0] += as0 + b * s1;
+							ap[i1] += as0 - b * s1;
+							bp[i0] += ar0 + b * r1;
+							bp[i1] += ar0 - b * r1;
+							if (!xc[j0] && !xc[j1]) {
+								xout[0] += s0;
+								xout[1] += r0;
+								xc[j0] = true;
+								xc[j1] = true;
+							}
+							pc[i0][j0] = true;
+							pc[i0][j1] = true;
+							pc[i1][j0] = true;
+							pc[i1][j1] = true;
+						}
+					}
+				}
+			}
+		}
+	}
+	for (int i = 1; i <= M; i++) {
+		for (int j = 1; j <= M; j++) {
+			auto co = cos(2.0 * M_PI * j * i / N);
+			if (!pc[i][j]) {
+				ap[i] += tp[j] * co;
+				bp[i] += up[j] * co;
+			}
+		}
+	}
+	for (int i = 1; i <= M; i++) {
+		if (!xc[i]) {
+			xout[0] += tp[i];
+			xout[1] += up[i];
+		}
+	}
+	xout[0] += xin[0];
+	xout[1] += xin[1];
+	for (int i = 1; i <= M; i++) {
+		for (int j = 1; j <= M; j++) {
+			auto si = sin(2.0 * M_PI * j * i / N);
+			am[i] -= um[j] * si;
+			bm[i] -= tm[j] * si;
+		}
+	}
+	for (int i = 1; i <= M; i++) {
+		if (first[i]) {
+			ap[i] += xin[0];
+			bp[i] += xin[1];
+		}
+	}
+	for (int i = 1; i <= M; i++) {
+		xout[2 * i] = ap[i] - am[i];
+		xout[2 * i + 1] = bp[i] + bm[i];
+		xout[2 * (N - i)] = ap[i] + am[i];
+		xout[2 * (N - i) + 1] = bp[i] - bm[i];
+	}
+	return xout;
+}
+
 std::vector<math_vertex> fft_radix2(std::vector<math_vertex> xin, int N) {
 	if (N == 1) {
 		return xin;
