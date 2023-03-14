@@ -94,6 +94,10 @@ math_vertex::properties::properties() {
 	cse = false;
 }
 
+bool math_vertex::valid() const {
+	return v.valid();
+}
+
 std::string math_vertex::properties::print_code(const std::vector<properties>& edges) {
 	std::string code;
 	if (out_num != -1) {
@@ -176,7 +180,6 @@ math_vertex math_vertex::post_optimize() {
 	return rc;
 }
 
-
 math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 	properties props;
 	props.op = op;
@@ -191,7 +194,6 @@ math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 	C.check_cse();
 	return std::move(C);
 }
-
 
 void math_vertex::optimize(std::vector<math_vertex>& vertices) {
 	for (auto& v : vertices) {
@@ -261,32 +263,42 @@ std::vector<math_vertex> math_vertex::new_inputs(int cnt) {
 }
 
 math_vertex operator+(const math_vertex& A, const math_vertex& B) {
+	assert(A.valid());
+	assert(B.valid());
 	return math_vertex::binary_op(ADD, A, B);
 }
 
 math_vertex operator-(const math_vertex& A, const math_vertex& B) {
+	assert(A.valid());
+	assert(B.valid());
 	return math_vertex::binary_op(SUB, A, B);
 }
 
 math_vertex operator*(const math_vertex& A, const math_vertex& B) {
+	assert(A.valid());
+	assert(B.valid());
 	return math_vertex::binary_op(MUL, A, B);
 }
 
 math_vertex operator-(const math_vertex& A) {
+	assert(A.valid());
 	return math_vertex::unary_op(NEG, A);
 }
 
 math_vertex& math_vertex::operator+=(const math_vertex& other) {
+	assert(valid());
 	*this = *this + other;
 	return *this;
 }
 
 math_vertex& math_vertex::operator-=(const math_vertex& other) {
+	assert(valid());
 	*this = *this - other;
 	return *this;
 }
 
 math_vertex& math_vertex::operator*=(const math_vertex& other) {
+	assert(valid());
 	*this = *this * other;
 	return *this;
 }
@@ -300,6 +312,7 @@ std::string math_vertex::execute(dag_vertex<properties>::executor& exe) {
 }
 
 math_vertex::op_cnt_t math_vertex::operation_count(dag_vertex<properties>::executor& exe) {
+	assert(valid());
 	op_cnt_t cnt;
 	cnt.add = cnt.mul = cnt.neg = 0;
 	v.execute(exe, [&cnt](properties& in, const std::vector<properties>& edges) {
@@ -351,22 +364,27 @@ math_vertex::math_vertex(dag_vertex<properties> && v0) {
 }
 
 math_vertex math_vertex::get_edge_in(int i) const {
+	assert(valid());
 	return math_vertex(v.get_edge_in(i));
 }
 
 int math_vertex::get_edge_in_count() const {
+	assert(valid());
 	return v.get_edge_in_count();
 }
 
 math_vertex math_vertex::get_edge_out(int i) const {
+	assert(valid());
 	return math_vertex(v.get_edge_out(i));
 }
 
 int math_vertex::get_edge_out_count() const {
+	assert(valid());
 	return v.get_edge_out_count();
 }
 
 bool math_vertex::check_cse() {
+	assert(valid());
 	value_number vn;
 	const auto op = v.properties().op;
 	vn.op = op;
@@ -430,6 +448,7 @@ math_vertex::cse_entry& math_vertex::cse_entry::operator=(const math_vertex& v) 
 }
 
 bool math_vertex::is_zero() const {
+	assert(valid());
 	if (v.properties().op == CON) {
 		return close2(v.properties().value, 0.0);
 	}
@@ -437,6 +456,7 @@ bool math_vertex::is_zero() const {
 }
 
 bool math_vertex::is_one() const {
+	assert(valid());
 	if (v.properties().op == CON) {
 		return close2(v.properties().value, 1.0);
 	}
@@ -444,6 +464,7 @@ bool math_vertex::is_one() const {
 }
 
 bool math_vertex::is_neg_one() const {
+	assert(valid());
 	if (v.properties().op == CON) {
 		return close2(v.properties().value, -1.0);
 	}
@@ -451,10 +472,12 @@ bool math_vertex::is_neg_one() const {
 }
 
 bool math_vertex::is_neg() const {
+	assert(valid());
 	return v.properties().op == NEG;
 }
 
 math_vertex math_vertex::get_neg() const {
+	assert(valid());
 	if (is_neg()) {
 		return get_edge_in(0);
 	} else {
@@ -463,10 +486,9 @@ math_vertex math_vertex::get_neg() const {
 }
 
 math_vertex math_vertex::associate_adds() {
+	assert(valid());
 
-
-	return optimize();
-
+	return *this;
 
 	math_vertex rc = *this;
 	if (is_additive(get_op())) {
@@ -545,6 +567,7 @@ math_vertex math_vertex::associate_adds() {
 }
 
 std::unordered_set<math_vertex, math_vertex::key> math_vertex::collect_additive_terms(std::unordered_set<math_vertex, key>& path) {
+	assert(valid());
 	return collect_additive_terms_down(path);
 }
 
@@ -553,7 +576,9 @@ size_t math_vertex::key::operator()(const math_vertex& v) const {
 }
 
 std::unordered_set<math_vertex, math_vertex::key> math_vertex::collect_additive_terms_down(std::unordered_set<math_vertex, key>& path) {
+	assert(valid());
 	std::unordered_set<math_vertex, key> terms;
+	path.insert(v);
 	if (!is_additive(get_op())) {
 		terms = collect_additive_terms_up(path);
 		terms.insert(*this);
@@ -565,16 +590,19 @@ std::unordered_set<math_vertex, math_vertex::key> math_vertex::collect_additive_
 		}
 	} else {
 		for (int i = 0; i < get_edge_in_count(); i++) {
-			path.insert(v);
-			auto tmp = get_edge_in(i).collect_additive_terms_down(path);
-			terms.insert(tmp.begin(), tmp.end());
+			if (path.find(get_edge_in(i)) == path.end()) {
+				auto tmp = get_edge_in(i).collect_additive_terms_down(path);
+				terms.insert(tmp.begin(), tmp.end());
+			}
 		}
 	}
 	return std::move(terms);
 }
 
 std::unordered_set<math_vertex, math_vertex::key> math_vertex::collect_additive_terms_up(std::unordered_set<math_vertex, key>& path) {
+	assert(valid());
 	std::unordered_set<math_vertex, key> terms;
+	path.insert(v);
 	if (is_additive(get_op())) {
 		terms.insert(*this);
 		for (int i = 0; i < get_edge_out_count(); i++) {
@@ -588,6 +616,7 @@ std::unordered_set<math_vertex, math_vertex::key> math_vertex::collect_additive_
 }
 
 math_vertex math_vertex::distribute_muls() {
+	assert(valid());
 	auto dmuls = distributive_muls();
 	std::unordered_map<double, std::vector<dag_vertex<properties>>>map_add;
 	std::unordered_map<double, std::vector<dag_vertex<properties>>>map_sub;
@@ -644,6 +673,7 @@ math_vertex math_vertex::distribute_muls() {
 }
 
 math_vertex math_vertex::optimize() {
+	assert(valid());
 	const auto op = v.properties().op;
 	for (int ei = 0; ei < edge_count(op); ei++) {
 		replace_edge(get_edge_in(ei), get_edge_in(ei).optimize());
@@ -725,14 +755,17 @@ math_vertex math_vertex::optimize() {
 }
 
 bool math_vertex::operator<(const math_vertex& other) const {
+	assert(valid());
 	return v < other.v;
 }
 
 bool math_vertex::operator==(const math_vertex& other) const {
+	assert(valid());
 	return v == other.v;
 }
 
 assoc_set math_vertex::associative_adds() const {
+	assert(valid());
 	assoc_set adds;
 	const auto op = v.properties().op;
 	if (is_additive(op)) {
@@ -751,14 +784,17 @@ assoc_set math_vertex::associative_adds() const {
 }
 
 operation_t math_vertex::get_op() const {
+	assert(valid());
 	return v.properties().op;
 }
 
 double math_vertex::get_value() const {
+	assert(valid());
 	return v.properties().value;
 }
 
 std::vector<math_vertex::distrib_t> math_vertex::distributive_muls() {
+	assert(valid());
 	std::vector<math_vertex::distrib_t> muls;
 	const auto op = v.properties().op;
 	if (is_additive(op)) {
@@ -804,7 +840,7 @@ std::vector<math_vertex::distrib_t> math_vertex::distributive_muls() {
 }
 
 math_vertex::math_vertex() {
-	if( !first_init) {
+	if (!first_init) {
 		first_init = true;
 		essential_constants.resize(3);
 		essential_constants[0] = (math_vertex(0.0));
@@ -818,6 +854,7 @@ math_vertex::cse_entry::cse_entry() {
 }
 
 std::pair<assoc_set, int> math_vertex::associative_muls() const {
+	assert(valid());
 	std::pair<assoc_set, int> muls;
 	const auto op = v.properties().op;
 	if (op == MUL) {

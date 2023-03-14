@@ -179,11 +179,39 @@ std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, in
 	const int N2 = N / R;
 	std::vector<math_vertex> xout(2 * N);
 	std::vector<std::vector<math_vertex>> sub(N1, std::vector<math_vertex>(2 * N2));
+	int begin = -(N1 / 2);
+	int end = begin + N1;
+	if (false) {
+		begin = -(N1 / 2);
+		end = begin + N1;
+	} else {
+		begin = 0;
+		end = N1;
+	}
+
+	const auto I = [N]( int n ) {
+		while( n < 0 ) {
+			n += N;
+		}
+		return n % N;
+	};
+	const auto I1 = [N1]( int n ) {
+		while( n < 0 ) {
+			n += N1;
+		}
+		return n % N1;
+	};
+	const auto I2 = [N2]( int n ) {
+		while( n < 0 ) {
+			n += N2;
+		}
+		return n % N2;
+	};
 
 	for (int n2 = 0; n2 < N2; n2++) {
-		for (int n1 = 0; n1 < N1; n1++) {
-			sub[n1][2 * n2] = xin[2 * (n2 * N1 + n1)];
-			sub[n1][2 * n2 + 1] = xin[2 * (n2 * N1 + n1) + 1];
+		for (int n1 = begin; n1 < end; n1++) {
+			sub[I1(n1)][2 * n2] = xin[2 * I(n2 * N1 + n1)];
+			sub[I1(n1)][2 * n2 + 1] = xin[2 * I(n2 * N1 + n1) + 1];
 		}
 	}
 	for (int n1 = 0; n1 < N1; n1++) {
@@ -194,12 +222,12 @@ std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, in
 			cmplx x;
 			cmplx t;
 			cmplx w;
-			x.x = (sub[0][2 * k2]);
-			x.y = (sub[0][2 * k2 + 1]);
-			for (int n1 = 1; n1 < N1; n1++) {
+			x.x = 0.0;
+			x.y = 0.0;
+			for (int n1 = begin; n1 < end; n1++) {
 				const double theta = -2.0 * M_PI * (n1 * (N2 * k1 + k2)) / N;
-				t.x = (sub[n1][2 * k2]);
-				t.y = (sub[n1][2 * k2 + 1]);
+				t.x = (sub[I1(n1)][2 * k2]);
+				t.y = (sub[I1(n1)][2 * k2 + 1]);
 				w.x = (cos(theta));
 				w.y = (sin(theta));
 				x = x + w * t;
@@ -226,6 +254,12 @@ std::vector<math_vertex> fft_radix4(std::vector<math_vertex> xin, int N) {
 		xout[3] = y1;
 		return xout;
 	}
+	const auto I = [N](int n) {
+		while( n < N) {
+			n+= N;
+		}
+		return n % N;
+	};
 	std::vector<math_vertex> xout(2 * N);
 	std::vector<math_vertex> even, odd1, odd3;
 	for (int n = 0; n < N / 2; n++) {
@@ -233,10 +267,10 @@ std::vector<math_vertex> fft_radix4(std::vector<math_vertex> xin, int N) {
 		even.push_back(xin[4 * n + 1]);
 	}
 	for (int n = 0; n < N / 4; n++) {
-		odd1.push_back(xin[8 * n + 2]);
-		odd1.push_back(xin[8 * n + 3]);
-		odd3.push_back(xin[8 * n + 6]);
-		odd3.push_back(xin[8 * n + 7]);
+		odd1.push_back(xin[2 * (4 * n + 1)]);
+		odd1.push_back(xin[2 * (4 * n + 1) + 1]);
+		odd3.push_back(xin[2 * (4 * n + 3)]);
+		odd3.push_back(xin[2 * (4 * n + 3) + 1]);
 	}
 	if (N == 4) {
 		even = fft_radix2(even, 2);

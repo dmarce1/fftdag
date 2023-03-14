@@ -89,6 +89,7 @@ public:
 	bool is_one() const;
 	bool is_neg_one() const;
 	math_vertex();
+	bool valid() const;
 	math_vertex(const math_vertex&v) = default;
 	math_vertex(math_vertex&& v) = default;
 	math_vertex& operator=(const math_vertex&v) = default;

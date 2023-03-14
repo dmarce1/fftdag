@@ -80,6 +80,9 @@ public:
 		state_ptr = std::shared_ptr<state>(ref.ptr);
 	}
 	dag_vertex() = default;
+	bool valid() const {
+		return state_ptr != nullptr;
+	}
 	static dag_vertex new_(Properties&& props) {
 		dag_vertex v;
 		auto sptr = new state;
