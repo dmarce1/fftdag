@@ -120,25 +120,25 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		char* ptr;
 		switch (op) {
 		case ADD:
-			if( A == B ) {
+			if (A == B) {
 				asprintf(&ptr, "\t%s += %s;\n", A.c_str(), C.c_str());
-			} else if ( A == C ) {
+			} else if (A == C) {
 				asprintf(&ptr, "\t%s += %s;\n", A.c_str(), B.c_str());
 			} else {
 				asprintf(&ptr, "\t%s = %s + %s;\n", A.c_str(), B.c_str(), C.c_str());
 			}
 			break;
 		case SUB:
-			if( A == B ) {
+			if (A == B) {
 				asprintf(&ptr, "\t%s -= %s;\n", A.c_str(), C.c_str());
 			} else {
 				asprintf(&ptr, "\t%s = %s - %s;\n", A.c_str(), B.c_str(), C.c_str());
 			}
 			break;
 		case MUL:
-			if( A == B ) {
+			if (A == B) {
 				asprintf(&ptr, "\t%s *= %s;\n", A.c_str(), C.c_str());
-			} else if ( A == C ) {
+			} else if (A == C) {
 				asprintf(&ptr, "\t%s *= %s;\n", A.c_str(), B.c_str());
 			} else {
 				asprintf(&ptr, "\t%s = %s * %s;\n", A.c_str(), B.c_str(), C.c_str());
@@ -385,11 +385,21 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 	std::set<math_vertex::weak_ref> done;
 	for (auto d : dags) {
 		nodes.push_back(math_vertex(d));
-		if (!is_arithmetic(math_vertex(nodes.back()).get_op())) {
+		if (math_vertex(nodes.back()).get_op() == IN) {
 			done.insert(nodes.back());
 		}
 	}
 	dags.clear();
+	int index = 0;
+	for (auto n : nodes) {
+		auto node = math_vertex(n);
+		if (node.get_op() == CON && done.find(node) == done.end()) {
+			std::string nm = std::string("c") + std::to_string(index++);
+			code += "\tconst double " + nm + " = " + std::to_string(node.v.properties().value) + ";\n";
+			node.v.properties().name = std::make_shared<std::string>(nm);
+			done.insert(node);
+		}
+	}
 	while (42) {
 		std::vector<math_vertex> candidates;
 		for (int i = 0; i < nodes.size(); i++) {
