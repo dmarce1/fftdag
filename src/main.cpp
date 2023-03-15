@@ -115,14 +115,19 @@ void print_code2(int N) {
 }
 
 int test() {
-	constexpr int R = 7;
-	constexpr int N = R * R;
+	constexpr int R1 = 2;
+	constexpr int R2 = 7;
+	constexpr int N1 = R1 * R1;
+	constexpr int N2 = R2;
+	constexpr int N = N1 * N2;
+	//constexpr int N = R;
 	srand(time(NULL));
 	auto inputs = math_vertex::new_inputs(2 * N);
 	//auto outputs = fft_radix4(inputs, N);
 //	auto outputs = fft_radix2(inputs, N);
 	//	auto outputs = fft_singleton(inputs, N);
-	auto outputs = fft_prime_power(R, inputs, N);
+//	auto outputs = fft_prime_power(R, inputs, N);
+	auto outputs = fft_prime_factor(N1, N2, R1, R2, inputs);
 	//math_vertex::optimize(outputs);
 	//math_vertex::optimize2(outputs);
 	print_code1(N);

@@ -464,7 +464,6 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 			}
 			in.push_back(v.get_edge_in(i));
 		}
-		fprintf(stderr, "%i\n", best_score);
 		code += v.v.properties().print_code(in);
 		v.v.free_edges();
 		done.insert(v);

@@ -31,6 +31,38 @@ struct cmplx {
 	}
 };
 
+std::vector<math_vertex> fft_prime_factor(int N1, int N2, int R1, int R2, std::vector<math_vertex> xin) {
+	int N = N1 * N2;
+	std::vector<math_vertex> xout(2 * N);
+	std::vector<std::vector<math_vertex>> sub1(N1, std::vector<math_vertex>(2 * N2));
+	std::vector<std::vector<math_vertex>> sub2(N2, std::vector<math_vertex>(2 * N1));
+	for (int n1 = 0; n1 < N1; n1++) {
+		for (int n2 = 0; n2 < N2; n2++) {
+			sub1[n1][2 * n2] = xin[2 * ((n1 * N2 + n2 * N1) % N)];
+			sub1[n1][2 * n2 + 1] = xin[2 * ((n1 * N2 + n2 * N1) % N) + 1];
+		}
+	}
+	for (int n1 = 0; n1 < N1; n1++) {
+		sub1[n1] = ((R2 == 2) ? fft_radix4(sub1[n1], N2) : fft_prime_power(R2, sub1[n1], N2));
+	}
+	for (int n1 = 0; n1 < N1; n1++) {
+		for (int k2 = 0; k2 < N2; k2++) {
+			sub2[k2][2 * n1] = sub1[n1][2 * k2];
+			sub2[k2][2 * n1 + 1] = sub1[n1][2 * k2 + 1];
+		}
+	}
+	for (int k2 = 0; k2 < N2; k2++) {
+		sub2[k2] = ((R1 == 2) ? fft_radix4(sub2[k2], N1) : fft_prime_power(R1, sub2[k2], N1));
+	}
+	for (int k = 0; k < N; k++) {
+		const int k1 = k % N1;
+		const int k2 = k % N2;
+		xout[2 * k] = sub2[k2][2 * k1];
+		xout[2 * k + 1] = sub2[k2][2 * k1 + 1];
+	}
+	return xout;
+}
+
 std::vector<math_vertex> fft_singleton(std::vector<math_vertex> xin, int N) {
 	const int M = (N - 1) / 2;
 	std::vector<math_vertex> xout(2 * N);
