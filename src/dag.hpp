@@ -12,12 +12,13 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 template<class Properties>
 class dag_vertex {
 public:
-	using function_type = std::function<void(Properties&, const std::vector<Properties>&)>;
+	using function_type = std::function<void(dag_vertex&, const std::vector<dag_vertex>&)>;
 private:
 	struct state {
 		int id;
@@ -27,7 +28,6 @@ private:
 	};
 	std::shared_ptr<state> state_ptr;
 	static int next_id;
-
 public:
 	struct key {
 		size_t operator()(const std::weak_ptr<state>& s) const {
@@ -41,23 +41,12 @@ public:
 		}
 	};
 	struct executor {
-		std::unordered_map<std::weak_ptr<state>, bool, key, equal> touched;
+		std::unordered_set<int> touched;
 		bool free;
 		executor(bool f = true) {
 			free = f;
 		}
 	};
-private:
-	void sort(executor& exe, std::vector<dag_vertex>& vertices) const {
-		const auto& edges_in = state_ptr->edges_in;
-		for (const auto& e : edges_in) {
-			e.sort(exe, vertices);
-		}
-		if (!exe.touched[state_ptr]) {
-			vertices.push_back(*this);
-			exe.touched[state_ptr] = true;
-		}
-	}
 public:
 	class weak_ref {
 		std::weak_ptr<state> ptr;
@@ -80,8 +69,20 @@ public:
 		state_ptr = std::shared_ptr<state>(ref.ptr);
 	}
 	dag_vertex() = default;
+	~dag_vertex() {
+		if (state_ptr) {
+			if (state_ptr.use_count() == 1) {
+				free_edges();
+				directory.erase(state_ptr->id);
+			}
+		}
+	}
 	bool valid() const {
 		return state_ptr != nullptr;
+	}
+	static dag_vertex generate_from_id(int id) {
+		assert(directory[id].ptr.use_count());
+		return directory[id];
 	}
 	static dag_vertex new_(Properties&& props) {
 		dag_vertex v;
@@ -89,6 +90,7 @@ public:
 		v.state_ptr = std::shared_ptr<state>(sptr);
 		v.state_ptr->props = std::move(props);
 		v.state_ptr->id = next_id;
+		directory[next_id] = v;
 		next_id++;
 		return std::move(v);
 	}
@@ -100,27 +102,40 @@ public:
 		}
 	}
 	void execute(executor& exe, const function_type& func) {
-		if (!exe.touched[state_ptr]) {
-			std::vector<Properties> props;
+		if (exe.touched.find(state_ptr->id) == exe.touched.end()) {
 			auto& edges_in = state_ptr->edges_in;
 			for (auto& e : edges_in) {
 				e.execute(exe, func);
 			}
-			for (const auto& e : edges_in) {
-				props.push_back(e.properties());
-			}
-			func(state_ptr->props, std::move(props));
+			func(*this, edges_in);
 			if (exe.free) {
 				free_edges();
 			}
-			exe.touched[state_ptr] = true;
+			exe.touched.insert(state_ptr->id);
 		}
 	}
-	std::vector<dag_vertex> sort() {
-		std::vector<dag_vertex> vertices;
+	std::vector<dag_vertex> sort(executor& exe) {
+		std::vector<dag_vertex> list;
+		if (exe.touched.find(state_ptr->id) == exe.touched.end()) {
+			std::vector<Properties> props;
+			auto& edges_in = state_ptr->edges_in;
+			for (auto& e : edges_in) {
+				auto tmp = e.sort(exe);
+				list.insert(list.end(), tmp.begin(), tmp.end());
+			}
+			list.push_back(*this);
+			exe.touched.insert(state_ptr->id);
+		}
+		return std::move(list);
+	}
+	static std::vector<dag_vertex> sort(executor& exe, std::vector<dag_vertex>& outputs) {
+		std::vector<dag_vertex> list;
 		executor touched;
-		sort(vertices, touched);
-		return std::move(vertices);
+		for (auto o : outputs) {
+			auto tmp = o.sort(exe);
+			list.insert(list.end(), tmp.begin(), tmp.end());
+		}
+		return std::move(list);
 	}
 	void execute(const function_type& func) {
 		executor touched;
@@ -211,9 +226,18 @@ public:
 	int use_count() const {
 		return state_ptr.use_count();
 	}
+	static void reset() {
+		next_id = 1;
+		directory.clear();
+	}
+private:
+	static std::unordered_map<int, dag_vertex<Properties>::weak_ref> directory;
 };
 
 template<class Properties>
 int dag_vertex<Properties>::next_id = 1;
+
+template<class Properties>
+std::unordered_map<int, typename dag_vertex<Properties>::weak_ref> dag_vertex<Properties>::directory;
 
 #endif /* FFTDAG_HPP_ */

@@ -49,7 +49,7 @@ public:
 		int out_num;
 		bool cse;
 		std::shared_ptr<value_number> vnum;
-		std::string print_code(const std::vector<properties>& edges);
+		std::string print_code(const std::vector<dag_vertex<properties>>& edges);
 		properties();
 	};
 	class weak_ref {
@@ -114,7 +114,8 @@ public:
 	std::unordered_set<math_vertex, key> collect_additive_terms_up(std::unordered_set<math_vertex, key>& path);
 	std::unordered_set<math_vertex, key> collect_additive_terms_down(std::unordered_set<math_vertex, key>& path);
 	operation_t get_op() const;
-	math_vertex post_optimize();
+	math_vertex post_optimize(dag_vertex<properties>::executor&);
+	math_vertex post_optimize2(dag_vertex<properties>::executor&);
 	double get_value() const;
 	op_cnt_t operation_count(dag_vertex<properties>::executor&);
 	std::string execute(dag_vertex<properties>::executor& exe);
@@ -123,6 +124,7 @@ public:
 	static std::vector<math_vertex> new_inputs(int cnt);
 	static std::string execute_all(std::vector<math_vertex>& vertices);
 	static void optimize(std::vector<math_vertex>& vertices);
+	static void optimize2(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator*(const math_vertex& A, const math_vertex& B);
@@ -133,10 +135,12 @@ public:
 		cse_entry();
 		cse_entry& operator=(const math_vertex&);
 	};
+	static void reset();
 private:
 	dag_vertex<properties> v;
 	bool check_cse();
 	static bool first_init;
+	static bool vacate_all;
 	static std::map<double, math_vertex> consts;
 	static std::unordered_map<value_number, cse_entry, value_key> cse;
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);

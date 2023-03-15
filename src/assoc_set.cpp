@@ -66,14 +66,15 @@ assoc_set operator-(const assoc_set& A, const assoc_set& B) {
 	return C;
 }
 
-assoc_set operator*(const assoc_set& A, const assoc_set& B) {
+assoc_set intersection(const assoc_set& a, const assoc_set& b) {
 	assoc_set C;
-	for (auto i : A.counts) {
-		C.counts[i.first] = i.second;
-	}
+	auto A = a;
+	auto B = b;
 	for (auto i : B.counts) {
-		if (C.counts.find(i.first) != C.counts.end()) {
-			C.counts[i.first] *= i.second;
+		if( A.counts.find(i.first) != A.counts.end()) {
+			if( A.counts[i.first] * i.second > 0) {
+				C.counts[i.first] = std::min(A.counts[i.first], i.second);
+			}
 		}
 	}
 	return C;
@@ -116,8 +117,17 @@ bool assoc_set::is_null() const {
 }
 
 bool assoc_set::is_subset_of(const assoc_set& A) const {
-	auto B = (*this + A);
-	return A.counts.size() >= B.counts.size();
+	for( auto i : counts) {
+		auto j = A.counts.find(i.first);
+		if( j == A.counts.end()) {
+			return false;
+		} else if( i.second * j->second < 0 ) {
+			return false;
+		} else if( i.second > j->second) {
+			return false;
+		}
+	}
+	return true;
 }
 
 bool assoc_set::is_superset_of(const assoc_set& A) const {

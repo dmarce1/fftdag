@@ -19,7 +19,7 @@ public:
 	std::string to_string() const;
 	friend assoc_set operator+(const assoc_set& A, const assoc_set& B);
 	friend assoc_set operator-(const assoc_set& A, const assoc_set& B);
-	friend assoc_set operator*(const assoc_set& A, const assoc_set& B);
+	friend assoc_set intersection(const assoc_set& A, const assoc_set& B);
 	friend assoc_set operator-(const assoc_set& A);
 	friend class assoc_set_key;
 };

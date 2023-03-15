@@ -181,7 +181,7 @@ std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, in
 	std::vector<std::vector<math_vertex>> sub(N1, std::vector<math_vertex>(2 * N2));
 	int begin = -(N1 / 2);
 	int end = begin + N1;
-	if (false) {
+	if (true) {
 		begin = -(N1 / 2);
 		end = begin + N1;
 	} else {
@@ -217,23 +217,56 @@ std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, in
 	for (int n1 = 0; n1 < N1; n1++) {
 		sub[n1] = fft_prime_power(N1, sub[n1], N2);
 	}
-	for (int k2 = 0; k2 < N2; k2++) {
-		for (int k1 = 0; k1 < N1; k1++) {
+	{
+		int k2 = 0;
+		for (int k1 = begin; k1 < end; k1++) {
+			xout[2 * I(k2 + k1 * N2)] = sub[I1(0)][2 * k2];
+			xout[2 * I(k2 + k1 * N2) + 1] = sub[I1(0)][2 * k2 + 1];
+		}
+		for (int n1 = 1; n1 < end; n1++) {
 			cmplx x;
-			cmplx t;
+			cmplx t_0, t_1;
 			cmplx w;
-			x.x = 0.0;
-			x.y = 0.0;
-			for (int n1 = begin; n1 < end; n1++) {
-				const double theta = -2.0 * M_PI * (n1 * (N2 * k1 + k2)) / N;
-				t.x = (sub[I1(n1)][2 * k2]);
-				t.y = (sub[I1(n1)][2 * k2 + 1]);
-				w.x = (cos(theta));
-				w.y = (sin(theta));
-				x = x + w * t;
+			for (int k1 = begin; k1 < end; k1++) {
+				const double theta_0 = -2.0 * M_PI * n1 * k1 / N1;
+				t_0.x = sub[I1(n1)][2 * k2];
+				t_0.y = sub[I1(n1)][2 * k2 + 1];
+				t_1.x = sub[I1(-n1)][2 * k2];
+				t_1.y = sub[I1(-n1)][2 * k2 + 1];
+				w.x = cos(theta_0);
+				w.y = sin(theta_0);
+				xout[2 * I(k1 * N2)] += w.x * (t_0.x + t_1.x);
+				xout[2 * I(k1 * N2) + 1] += w.x * (t_0.y + t_1.y);
+				xout[2 * I(k1 * N2)] += w.y * (t_1.y - t_0.y);
+				xout[2 * I(k1 * N2) + 1] += w.y * (t_0.x - t_1.x);
 			}
-			xout[2 * (k2 + k1 * N2)] = x.x;
-			xout[2 * (k2 + k1 * N2) + 1] = x.y;
+		}
+	}
+	for (int k2 = 1; k2 < N2; k2++) {
+		for (int k1 = begin; k1 < end; k1++) {
+			xout[2 * I(k2 + k1 * N2)] = sub[I1(0)][2 * k2];
+			xout[2 * I(k2 + k1 * N2) + 1] = sub[I1(0)][2 * k2 + 1];
+		}
+		for (int k1 = begin + 1; k1 < end; k1++) {
+			cmplx x;
+			cmplx t_0, t_1;
+			cmplx w;
+			x.x = x.y = 0.0;
+			for (int n1 = 1; n1 < end; n1++) {
+				const double theta_0 = -2.0 * M_PI * (n1 * (N2 * k1 + k2)) / N;
+				t_0.x = sub[I1(n1)][2 * k2];
+				t_0.y = sub[I1(n1)][2 * k2 + 1];
+				t_1.x = sub[I1(-n1)][2 * k2];
+				t_1.y = sub[I1(-n1)][2 * k2 + 1];
+				w.x = cos(theta_0);
+				w.y = sin(theta_0);
+				x.x = x.x + w.x * (t_0.x + t_1.x) + w.y * (t_1.y - t_0.y);
+				x.y = x.y + w.x * (t_0.y + t_1.y) + w.y * (t_0.x - t_1.x);
+			}
+			xout[2 * I(k2 + k1 * N2)] += x.x;
+			xout[2 * I(k2 + k1 * N2) + 1] += x.y;
+			xout[2 * I(k2 + begin * N2)] -= x.x;
+			xout[2 * I(k2 + begin * N2) + 1] -= x.y;
 		}
 	}
 	return xout;
