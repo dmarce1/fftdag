@@ -1,5 +1,6 @@
 #include "names.hpp"
 #include <cassert>
+#include <limits>
 
 name_server::name_server() {
 	next_id = 0;
@@ -13,7 +14,7 @@ std::string name_server::get_declarations() const {
 
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
-		auto new_name = std::string("r") + std::to_string(next_id);
+		auto new_name = std::string("rr") + std::to_string(next_id);
 		declarations += std::string("\tdouble ") + new_name + ";\n";
 		available->insert(std::move(new_name));
 		next_id++;
@@ -53,5 +54,13 @@ std::pair<name_server::name_ptr, std::string> name_server::reserve_name(std::str
 	assert(in_use->find(name) == in_use->end());
 	(*in_use)[name] = nptr;
 	return std::make_pair(nptr, code);
+}
+
+int distance(const std::string& a, const std::string& b) {
+	int d = std::numeric_limits<int>::max() - 1;
+	if (a[0] == b[0] && a[1] == b[1]) {
+		d = std::abs(atoi(a.c_str() + 2) - atoi(b.c_str() + 2));
+	}
+	return d;
 }
 

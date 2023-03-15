@@ -13,7 +13,9 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include <algorithm>
 #include <vector>
+#include <cmath>
 
 template<class Properties>
 class dag_vertex {
@@ -100,7 +102,7 @@ public:
 	void free_edges() {
 		auto& edges_in = state_ptr->edges_in;
 		while (edges_in.size()) {
-		//	edges_in.back().remove_edge_out(*this);
+			//	edges_in.back().remove_edge_out(*this);
 			edges_in.pop_back();
 		}
 	}
@@ -175,17 +177,17 @@ public:
 		state_ptr->edges_in.push_back(v);
 //		v.add_edge_out(*this);
 	}
-/*	void remove_edge_out(const dag_vertex& v) {
-		auto& edges_out = state_ptr->edges_out;
-		for (int i = 0; i < edges_out.size(); i++) {
-			if (edges_out[i] == v) {
-				edges_out[i] = edges_out.back();
-				edges_out.pop_back();
-				return;
-			}
-		}
-		assert(false);
-	}*/
+	/*	void remove_edge_out(const dag_vertex& v) {
+	 auto& edges_out = state_ptr->edges_out;
+	 for (int i = 0; i < edges_out.size(); i++) {
+	 if (edges_out[i] == v) {
+	 edges_out[i] = edges_out.back();
+	 edges_out.pop_back();
+	 return;
+	 }
+	 }
+	 assert(false);
+	 }*/
 	void remove_edge_in(const dag_vertex& v) {
 		auto& edges_in = state_ptr->edges_in;
 		for (int i = 0; i < edges_in.size(); i++) {
@@ -193,7 +195,7 @@ public:
 				//edges_in[i].remove_edge_out(*this);
 				//for (int j = i; j < edges_in.size() - 1; j++) {
 				//	edges_in[j] = edges_in[j + 1];
-			//	}
+				//	}
 				edges_in.pop_back();
 				return;
 			}

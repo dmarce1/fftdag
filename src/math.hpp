@@ -48,6 +48,7 @@ public:
 		double value;
 		int out_num;
 		bool cse;
+		int depth;
 		std::shared_ptr<value_number> vnum;
 		std::string print_code(const std::vector<math_vertex>& edges);
 		properties();

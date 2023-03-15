@@ -2,6 +2,7 @@
 #include "util.hpp"
 
 #include <algorithm>
+#include <queue>
 
 bool is_arithmetic(operation_t op) {
 	switch (op) {
@@ -94,6 +95,7 @@ std::string math_vertex::value_number::to_string() const {
 math_vertex::properties::properties() {
 	out_num = -1;
 	cse = false;
+	depth = 0;
 }
 
 bool math_vertex::valid() const {
@@ -112,19 +114,38 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		name = names->generate_name();
 	}
 	if (is_arithmetic(op)) {
+		const auto& A = *name;
+		const auto& B = *edges[0].v.properties().name;
+		const auto& C = *edges[op == NEG ? 0 : 1].v.properties().name;
 		char* ptr;
 		switch (op) {
 		case ADD:
-			asprintf(&ptr, "\t%s = %s + %s;\n", name->c_str(), edges[0].v.properties().name->c_str(), edges[1].v.properties().name->c_str());
+			if( A == B ) {
+				asprintf(&ptr, "\t%s += %s;\n", A.c_str(), C.c_str());
+			} else if ( A == C ) {
+				asprintf(&ptr, "\t%s += %s;\n", A.c_str(), B.c_str());
+			} else {
+				asprintf(&ptr, "\t%s = %s + %s;\n", A.c_str(), B.c_str(), C.c_str());
+			}
 			break;
 		case SUB:
-			asprintf(&ptr, "\t%s = %s - %s;\n", name->c_str(), edges[0].v.properties().name->c_str(), edges[1].v.properties().name->c_str());
+			if( A == B ) {
+				asprintf(&ptr, "\t%s -= %s;\n", A.c_str(), C.c_str());
+			} else {
+				asprintf(&ptr, "\t%s = %s - %s;\n", A.c_str(), B.c_str(), C.c_str());
+			}
 			break;
 		case MUL:
-			asprintf(&ptr, "\t%s = %s * %s;\n", name->c_str(), edges[0].v.properties().name->c_str(), edges[1].v.properties().name->c_str());
+			if( A == B ) {
+				asprintf(&ptr, "\t%s *= %s;\n", A.c_str(), C.c_str());
+			} else if ( A == C ) {
+				asprintf(&ptr, "\t%s *= %s;\n", A.c_str(), B.c_str());
+			} else {
+				asprintf(&ptr, "\t%s = %s * %s;\n", A.c_str(), B.c_str(), C.c_str());
+			}
 			break;
 		case NEG:
-			asprintf(&ptr, "\t%s = -%s;\n", name->c_str(), edges[0].v.properties().name->c_str());
+			asprintf(&ptr, "\t%s = -%s;\n", A.c_str(), B.c_str());
 			break;
 		default:
 			break;
@@ -157,6 +178,7 @@ math_vertex math_vertex::binary_op(operation_t op, math_vertex A, math_vertex B)
 	C.v = dag_vertex<properties>::new_(std::move(props));
 	auto db = A.v.properties().names;
 	db = (db == nullptr) ? B.v.properties().names : db;
+	C.v.properties().depth = std::max(A.v.properties().depth, B.v.properties().depth) + 1;
 	A.set_database(db);
 	B.set_database(db);
 	C.set_database(db);
@@ -172,6 +194,7 @@ math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 	props.op = op;
 	math_vertex C;
 	C.v = dag_vertex<properties>::new_(std::move(props));
+	C.v.properties().depth = A.v.properties().depth + 1;
 	auto db = A.v.properties().names;
 	A.set_database(db);
 	C.set_database(db);
@@ -346,6 +369,8 @@ math_vertex::op_cnt_t math_vertex::operation_count(std::vector<math_vertex>& out
 
 std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 	std::string code;
+	int ncnt = 5;
+	std::vector<std::string> last_names;
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n].v.properties().out_num = n;
 	}
@@ -360,6 +385,9 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 	std::set<math_vertex::weak_ref> done;
 	for (auto d : dags) {
 		nodes.push_back(math_vertex(d));
+		if (!is_arithmetic(math_vertex(nodes.back()).get_op())) {
+			done.insert(nodes.back());
+		}
 	}
 	dags.clear();
 	while (42) {
@@ -385,28 +413,48 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 		if (!candidates.size()) {
 			break;
 		}
-		int best_score = 1000000000;
+		int best_score = 0;
 		int best_index;
 		for (int i = 0; i < candidates.size(); i++) {
-			int score = 0;
-			int n = candidates[i].get_edge_in_count();
+			int score = 10000;
+			auto c = candidates[i];
+			int n = c.get_edge_in_count();
 			for (int j = 0; j < n; j++) {
-				auto cnt = candidates[i].get_edge_in(j).v.use_count();
-				score += cnt * cnt;
+				auto edge = c.get_edge_in(j);
+				if (edge.v.use_count() <= 2) {
+					score += 1000;
+				}
 			}
-			if (n > 0) {
-				score /= n;
-			}
-			if (score < best_score) {
+			score -= 100 * c.v.use_count();
+			score -= c.v.properties().depth;
+			if (score > best_score) {
 				best_score = score;
 				best_index = i;
 			}
 		}
+
 		auto v = candidates[best_index];
+		int n = v.get_edge_in_count();
+		for (int j = 0; j < n; j++) {
+			auto edge = v.get_edge_in(j);
+			if (edge.v.use_count() <= 2) {
+				v.v.properties().name = edge.v.properties().name;
+				break;
+			}
+		}
+
 		std::vector<math_vertex> in;
 		for (int i = 0; i < v.get_edge_in_count(); i++) {
+			last_names.push_back(*v.get_edge_in(i).v.properties().name);
+			if (last_names.size() > 5) {
+				for (int i = 0; i < last_names.size() - 1; i++) {
+					last_names[i] = last_names[i + 1];
+				}
+				last_names.pop_back();
+			}
 			in.push_back(v.get_edge_in(i));
 		}
+		fprintf(stderr, "%i\n", best_score);
 		code += v.v.properties().print_code(in);
 		v.v.free_edges();
 		done.insert(v);

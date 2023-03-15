@@ -29,5 +29,7 @@ private:
 	int next_id;
 };
 
+int distance(const std::string& a, const std::string& b);
+
 
 #endif /* NAMES_HPP_ */
