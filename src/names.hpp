@@ -20,7 +20,7 @@ public:
 	using name_ptr = std::shared_ptr<std::string>;
 	name_server();
 	name_ptr generate_name();
-	std::pair<name_server::name_ptr, std::string> reserve_name(std::string&& name);
+	std::pair<name_server::name_ptr, std::string> reserve_name(std::string name);
 	std::string get_declarations() const;
 private:
 	std::shared_ptr<std::set<std::string>> available;

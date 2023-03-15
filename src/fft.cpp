@@ -172,8 +172,8 @@ std::vector<math_vertex> fft_radix2(std::vector<math_vertex> xin, int N) {
 }
 
 std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, int N) {
-	if (N == 1) {
-		return xin;
+	if (N == R) {
+		return fft_singleton(xin, N);
 	}
 	const int N1 = R;
 	const int N2 = N / R;
@@ -218,10 +218,9 @@ std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, in
 		sub[n1] = fft_prime_power(N1, sub[n1], N2);
 	}
 	{
-		int k2 = 0;
 		for (int k1 = begin; k1 < end; k1++) {
-			xout[2 * I(k2 + k1 * N2)] = sub[I1(0)][2 * k2];
-			xout[2 * I(k2 + k1 * N2) + 1] = sub[I1(0)][2 * k2 + 1];
+			xout[2 * I(k1 * N2)] = sub[I1(0)][0];
+			xout[2 * I(k1 * N2) + 1] = sub[I1(0)][1];
 		}
 		for (int n1 = 1; n1 < end; n1++) {
 			cmplx x;
@@ -229,10 +228,10 @@ std::vector<math_vertex> fft_prime_power(int R, std::vector<math_vertex> xin, in
 			cmplx w;
 			for (int k1 = begin; k1 < end; k1++) {
 				const double theta_0 = -2.0 * M_PI * n1 * k1 / N1;
-				t_0.x = sub[I1(n1)][2 * k2];
-				t_0.y = sub[I1(n1)][2 * k2 + 1];
-				t_1.x = sub[I1(-n1)][2 * k2];
-				t_1.y = sub[I1(-n1)][2 * k2 + 1];
+				t_0.x = sub[I1(n1)][0];
+				t_0.y = sub[I1(n1)][1];
+				t_1.x = sub[I1(-n1)][0];
+				t_1.y = sub[I1(-n1)][1];
 				w.x = cos(theta_0);
 				w.y = sin(theta_0);
 				xout[2 * I(k1 * N2)] += w.x * (t_0.x + t_1.x);
