@@ -4,143 +4,73 @@
 #include <time.h>
 #include "util.hpp"
 
-void print_code1(int N) {
-	printf("\n"
-			"\n"
-			"\n"
-			"#include <fftw3.h>\n"
-			"#include <cmath>\n"
-			"#include <vector>\n"
-			"#include <complex>\n"
-			"#include <unordered_map>\n"
-			"\n");
-	printf("void test(double* x) {\n");
-}
+constexpr int Nmin = 2;
+constexpr int Nmax = 64;
 
-void print_code2(int N) {
-	printf("}\n");
-	printf("\n"
-			"\n"
-			"void fftw(std::vector<std::complex<double>>& x) {\n"
-			"\tconst int N = x.size();\n"
-			"\tstatic std::unordered_map<int, fftw_plan> plans;\n"
-			"\tstatic std::unordered_map<int, fftw_complex*> in;\n"
-			"\tstatic std::unordered_map<int, fftw_complex*> out;\n"
-			"\tif (plans.find(N) == plans.end()) {\n"
-			"\t\tin[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);\n"
-			"\t\tout[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);\n"
-			"\t\tplans[N] = fftw_plan_dft_1d(N, in[N], out[N], FFTW_FORWARD, FFTW_ESTIMATE);\n"
-			"\t}\n"
-			"\tauto* i = in[N];\n"
-			"\tauto* o = out[N];\n"
-			"\tfor (int n = 0; n < N; n++) {\n"
-			"\t\ti[n][0] = x[n].real();\n"
-			"\t\ti[n][1] = x[n].imag();\n"
-			"\t}\n"
-			"\tfftw_execute(plans[N]);\n"
-			"\tfor (int n = 0; n < N; n++) {\n"
-			"\t\tx[n].real(o[n][0]);\n"
-			"\tx[n].imag(o[n][1]);\n"
-			"\t}\n"
-			"}\n"
-			"\n"
-			"\n"
-			"double rand1() {\n"
-			"\treturn (rand() + 0.5) / RAND_MAX;\n"
-			"}\n"
-			"\n");
-	printf("#include <chrono>\n"
-			"class timer {\n"
-			"\tstd::chrono::time_point<std::chrono::high_resolution_clock> start_time;\n"
-			"\tdouble time;\n"
-			"public:\n"
-			"\tinline timer() {\n"
-			"\t\ttime = 0.0;\n"
-			"\t}\n"
-			"\tinline void stop() {\n"
-			"\t\tstd::chrono::time_point<std::chrono::high_resolution_clock> stop_time = std::chrono::high_resolution_clock::now();\n"
-			"\t\tstd::chrono::duration<double> dur = stop_time - start_time;\n"
-			"\t\ttime += dur.count();\n"
-			"\t}\n"
-			"\tinline void start() {\n"
-			"\t\tstart_time = std::chrono::high_resolution_clock::now();\n"
-			"\t}\n"
-			"\tinline void reset() {\n"
-			"\t\ttime = 0.0;\n"
-			"\t}\n"
-			"\tinline double read() {\n"
-			"\t\treturn time;\n"
-			"\t}\n"
-			"};\n"
-			"\n"
-			"\n"
-			"\n"
-			"int main() {\n"
-			"\tconstexpr int N = %i;\n"
-			"\tstd::vector<double> xin(2 * N);\n"
-			"\tstd::vector<std::complex<double>> y(N);\n"
-			"\ttimer tm1, tm2;\n"
-			"\tfor( int i = 0; i < 256; i++) {\n"
-			"\t\tfor( int n = 0; n < 2 * N; n++) {\n"
-			"\t\t\txin[n] = rand1();\n"
-			"\t\t\tif( n %% 2 == 0 ) {\n"
-			"\t\t\t\ty[n / 2].real(xin[n]);\n"
-			"\t\t\t} else {\n"
-			"\t\t\t\ty[n / 2].imag(xin[n]);\n"
-			"\t\t\t}\n"
-			"\t\t}\n"
-			"\t\ttm1.start();\n"
-			"\t\ttest(xin.data());\n"
-			"\t\tauto xout = xin;\n"
-			"\t\ttm1.stop();\n"
-			"\t\ttm2.start();\n"
-			"\t\tfftw(y);\n"
-			"\t\ttm2.stop();\n"
-			"\t\tdouble error = 0.0;\n"
-			"\t\tfor( int n = 0; n < N; n++) {\n"
-			"\t\t\terror += std::pow(xout[2 * n] - y[n].real(), 2);\n"
-			"\t\t\terror += std::pow(xout[2 * n + 1] - y[n].imag(), 2);\n"
-			"\t\t\t//printf( \"%%i %%e %%e %%e %%e;\\n\", n, xout[2*n], xout[2*n+1], y[n].real(), y[n].imag())\n;\n"
-			"\t\t}\n"
-			"\t\terror = error / (2.0 * N);\n"
-			"\t\tif( i == 255 ) {\n"
-			"\t\t\tprintf( \"Error = %%e\\n\", error );\n"
-			"\t\t}\n"
-			"\t}\n"
-			"\tprintf( \"%%e %%e %%e\\n\", tm1.read(), tm2.read(), tm2.read() / tm1.read() );\n"
-			"\t\n"
-			"}\n"
-			"", N);
-
-}
-
-int test() {
-	constexpr int R1 = 2;
-	constexpr int R2 = 7;
-	constexpr int N1 = R1 * R1;
-	constexpr int N2 = R2;
-	constexpr int N = N1 * N2;
-	//constexpr int N = R;
-	srand(time(NULL));
-	auto inputs = math_vertex::new_inputs(2 * N);
-	//auto outputs = fft_radix4(inputs, N);
-//	auto outputs = fft_radix2(inputs, N);
-	//	auto outputs = fft_singleton(inputs, N);
-//	auto outputs = fft_prime_power(R, inputs, N);
-	auto outputs = fft_prime_factor(N1, N2, R1, R2, inputs);
-	//math_vertex::optimize(outputs);
-	//math_vertex::optimize2(outputs);
-	print_code1(N);
-	auto cnt = math_vertex::operation_count(outputs);
-	inputs.clear();
-	auto code = math_vertex::execute_all(outputs);
-	printf("%s\n", code.c_str());
-	print_code2(N);
-//	auto opcnt = dag_node::get_operation_count();
-	fprintf(stderr, "tot = %i | add = %i | mul = %i | neg = %i\n", cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
-
-	return 0;
-}
 int main(int argc, char **argv) {
-	test();
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(2 * N);
+		auto outputs = fft(inputs, N);
+		auto cnt = math_vertex::operation_count(outputs);
+		inputs.clear();
+		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
+		auto code = math_vertex::execute_all(outputs);
+		std::string fname = "fft." + std::to_string(N) + ".cpp";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		code = std::string("\n\nvoid fft_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+	}
+
+	system("cp ../../gen_src/main.cpp .\n");
+
+	FILE* fp = fopen("fft.hpp", "wt");
+	fprintf(fp, "#pragma once\n\n");
+	fprintf(fp, "#define FFT_NMAX %i\n", Nmax);
+	fprintf(fp, "#define FFT_NMIN %i\n\n\n", Nmin);
+	for (int N = Nmin; N <= Nmax; N++) {
+		fprintf(fp, "void fft_%i(double*);\n", N);
+	}
+	fprintf(fp, "\n\nvoid fft(double*, int);\n");
+	fprintf(fp, "\n\n");
+	fclose(fp);
+
+	fp = fopen("fft.cpp", "wt");
+	fprintf(fp, "#include \"fft.hpp\"\n\n\n");
+	fprintf(fp, "using fft_type = void(*)(double*);\n\n");
+	fprintf(fp, "fft_type fft_pointer[FFT_NMAX + 1] = {");
+	for (int N = 0; N <= Nmax; N++) {
+		if (N % 8 == 0) {
+			fprintf(fp, "\n\t");
+		}
+		if (N < Nmin) {
+			fprintf(fp, "nullptr");
+		} else {
+			fprintf(fp, "&fft_%i", N);
+		}
+		if (N != Nmax) {
+			fprintf(fp, ", ");
+		}
+	}
+	fprintf(fp, "\n};\n\n");
+	fprintf(fp, "void fft(double* x, int N) {\n");
+	fprintf(fp, "\t(*fft_pointer[N])(x);\n");
+	fprintf(fp, "}\n\n\n");
+
+	fclose(fp);
+
+	fp = fopen("Makefile", "wt");
+	fprintf(fp, "CC=g++\n");
+	fprintf(fp, "CFLAGS=-I. -Ofast -march=native\n");
+	fprintf(fp, "DEPS = fft.hpp\n");
+	fprintf(fp, "OBJ = main.o fft.o ");
+	for (int n = Nmin; n <= Nmax; n++) {
+		fprintf(fp, "fft.%i.o ", n);
+	}
+	fprintf(fp, "\n%%.o: %%.cpp $(DEPS)\n");
+	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
+	fprintf(fp, "ffttest: $(OBJ)\n");
+	fprintf(fp, "\t$(CC) -o $@ $^ $(CFLAGS) -lfftw3\n");
+	fclose(fp);
+	return 0;
 }

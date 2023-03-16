@@ -26,7 +26,6 @@ private:
 		int id;
 		Properties props;
 		std::vector<dag_vertex> edges_in;
-//		std::vector<dag_vertex> edges_out;
 	};
 	std::shared_ptr<state> state_ptr;
 	static int next_id;
@@ -75,16 +74,11 @@ public:
 		if (state_ptr) {
 			if (state_ptr.use_count() == 1) {
 				free_edges();
-				directory.erase(state_ptr->id);
 			}
 		}
 	}
 	bool valid() const {
 		return state_ptr != nullptr;
-	}
-	static dag_vertex generate_from_id(int id) {
-		assert(directory[id].ptr.use_count());
-		return directory[id];
 	}
 	static dag_vertex new_(Properties&& props) {
 		dag_vertex v;
@@ -92,7 +86,6 @@ public:
 		v.state_ptr = std::shared_ptr<state>(sptr);
 		v.state_ptr->props = std::move(props);
 		v.state_ptr->id = next_id;
-		directory[next_id] = v;
 		next_id++;
 		return std::move(v);
 	}
@@ -102,7 +95,6 @@ public:
 	void free_edges() {
 		auto& edges_in = state_ptr->edges_in;
 		while (edges_in.size()) {
-			//	edges_in.back().remove_edge_out(*this);
 			edges_in.pop_back();
 		}
 	}
@@ -170,32 +162,13 @@ public:
 	bool operator!=(void* ptr) {
 		return ptr == nullptr && state_ptr != nullptr;
 	}
-//	void add_edge_out(const dag_vertex& v) {
-//		state_ptr->edges_out.push_back(v);
-//	}
 	void add_edge_in(dag_vertex& v) {
 		state_ptr->edges_in.push_back(v);
-//		v.add_edge_out(*this);
 	}
-	/*	void remove_edge_out(const dag_vertex& v) {
-	 auto& edges_out = state_ptr->edges_out;
-	 for (int i = 0; i < edges_out.size(); i++) {
-	 if (edges_out[i] == v) {
-	 edges_out[i] = edges_out.back();
-	 edges_out.pop_back();
-	 return;
-	 }
-	 }
-	 assert(false);
-	 }*/
 	void remove_edge_in(const dag_vertex& v) {
 		auto& edges_in = state_ptr->edges_in;
 		for (int i = 0; i < edges_in.size(); i++) {
 			if (edges_in[i] == v) {
-				//edges_in[i].remove_edge_out(*this);
-				//for (int j = i; j < edges_in.size() - 1; j++) {
-				//	edges_in[j] = edges_in[j + 1];
-				//	}
 				edges_in.pop_back();
 				return;
 			}
@@ -208,18 +181,10 @@ public:
 	int get_edge_in_count() const {
 		return state_ptr->edges_in.size();
 	}
-//	dag_vertex get_edge_out(int i) const {
-//		return state_ptr->edges_out[i];
-//	}
-//	int get_edge_out_count() const {
-//		return state_ptr->edges_out.size();
-//	}
 	void replace_edge_in(const dag_vertex& v, dag_vertex&& u) {
 		for (auto& edge : state_ptr->edges_in) {
 			if (edge == v) {
-//				edge.remove_edge_out(*this);
 				edge = std::move(u);
-//				edge.add_edge_out(*this);
 				return;
 			}
 		}
@@ -232,16 +197,11 @@ public:
 	}
 	static void reset() {
 		next_id = 1;
-		directory.clear();
 	}
-private:
-	static std::unordered_map<int, dag_vertex<Properties>::weak_ref> directory;
 };
 
 template<class Properties>
 int dag_vertex<Properties>::next_id = 1;
 
-template<class Properties>
-std::unordered_map<int, typename dag_vertex<Properties>::weak_ref> dag_vertex<Properties>::directory;
 
 #endif /* FFTDAG_HPP_ */

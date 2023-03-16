@@ -214,11 +214,12 @@ math_vertex::math_vertex(double constant) {
 		if (iter != consts.end()) {
 			if (close2(iter->first, constant)) {
 				flag = true;
-			} else if (iter != consts.begin()) {
-				iter--;
-				if (close2(iter->first, constant)) {
-					flag = true;
-				}
+			}
+		}
+		if (!flag && (iter != consts.begin())) {
+			iter--;
+			if (close2(iter->first, constant)) {
+				flag = true;
 			}
 		}
 		if (!flag) {
@@ -394,9 +395,14 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 	for (auto n : nodes) {
 		auto node = math_vertex(n);
 		if (node.get_op() == CON && done.find(node) == done.end()) {
-			std::string nm = std::string("c") + std::to_string(index++);
-			code += "\tconst double " + nm + " = " + std::to_string(node.v.properties().value) + ";\n";
-			node.v.properties().name = std::make_shared<std::string>(nm);
+			if (!(node.is_zero() || node.is_one() || node.is_neg_one())) {
+				std::string nm = std::string("c") + std::to_string(index++);
+				char* ptr;
+				asprintf(&ptr, "\tconstexpr double %s = %.17e;\n", nm.c_str(), node.v.properties().value);
+				code += ptr;
+				free(ptr);
+				node.v.properties().name = std::make_shared<std::string>(nm);
+			}
 			done.insert(node);
 		}
 	}
@@ -447,7 +453,7 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 		int n = v.get_edge_in_count();
 		for (int j = 0; j < n; j++) {
 			auto edge = v.get_edge_in(j);
-			if (edge.v.use_count() <= 2) {
+			if (edge.v.use_count() <= 2 && !edge.is_constant()) {
 				v.v.properties().name = edge.v.properties().name;
 				break;
 			}
@@ -608,12 +614,16 @@ size_t math_vertex::key::operator()(const math_vertex& v) const {
 	return v.v.get_unique_id();
 }
 
+bool math_vertex::is_constant() const {
+	return get_op() == CON;
+}
+
 math_vertex math_vertex::optimize() {
 	assert(valid());
 	const auto op = v.properties().op;
-	for (int ei = 0; ei < edge_count(op); ei++) {
-		replace_edge(get_edge_in(ei), get_edge_in(ei).optimize());
-	}
+	//for (int ei = 0; ei < edge_count(op); ei++) {
+	//	replace_edge(get_edge_in(ei), get_edge_in(ei).optimize());
+//	}
 	math_vertex c = *this;
 	math_vertex a;
 	math_vertex b;
@@ -625,8 +635,10 @@ math_vertex math_vertex::optimize() {
 	}
 	switch (op) {
 	case ADD:
-		if (a == b) {
-			c = math_vertex(2.0) * a;
+		if (a.is_constant() && b.is_constant()) {
+			c = math_vertex(a.get_value() + b.get_value());
+		} else if (a == b) {
+			c = a * math_vertex(2.0);
 		} else if (a.is_neg() && b.is_neg()) {
 			c = -(a.get_neg() + b.get_neg());
 		} else if (a.is_neg()) {
@@ -642,7 +654,9 @@ math_vertex math_vertex::optimize() {
 		}
 		break;
 	case SUB:
-		if (a == b) {
+		if (a.is_constant() && b.is_constant()) {
+			c = math_vertex(a.get_value() - b.get_value());
+		} else if (a == b) {
 			c = math_vertex(0.0);
 		} else if (a.is_neg() && b.is_neg()) {
 			c = b.get_neg() - a.get_neg();
@@ -659,7 +673,9 @@ math_vertex math_vertex::optimize() {
 		}
 		break;
 	case MUL:
-		if (a.is_neg() && b.is_neg()) {
+		if (a.is_constant() && b.is_constant()) {
+			c = math_vertex(a.get_value() * b.get_value());
+		} else if (a.is_neg() && b.is_neg()) {
 			c = a.get_neg() * b.get_neg();
 		} else if (a.is_neg()) {
 			c = -(a.get_neg() * b);

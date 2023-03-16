@@ -1,6 +1,112 @@
 #include "fft.hpp"
 
 #include <cmath>
+#include <complex>
+#include <fftw3.h>
+
+static int mod_pow(int a, int b, int m) {
+	int rc = 1;
+	int apow = a;
+	while (b) {
+		if (b & 1) {
+			rc = ((rc % m) * (apow % m)) % m;
+		}
+		b >>= 1;
+		apow = ((apow % m) * (apow % m)) % m;
+	}
+	return rc;
+}
+
+static int mod_inv(int a, int m) {
+	return mod_pow(a, m - 2, m);
+}
+
+static int generator(int N) {
+	static thread_local std::unordered_map<int, int> values;
+	auto i = values.find(N);
+	if (i == values.end()) {
+		for (int g = 2;; g++) {
+			std::set<int> I;
+			bool fail = false;
+			for (int m = 0; m < N - 2; m++) {
+				int n = mod_pow(g, m, N);
+				if (I.find(n) == I.end()) {
+					I.insert(n);
+				} else {
+					fail = true;
+					break;
+				}
+			}
+			if (!fail) {
+				values[N] = g;
+				i = values.find(N);
+				break;
+			}
+		}
+	}
+	return i->second;
+}
+
+std::vector<int> raders_ginvq(int N) {
+	const int g = generator(N);
+	std::vector<int> ginvq;
+	for (int q = 0; q < N - 1; q++) {
+		ginvq.push_back(mod_inv(mod_pow(g, q, N), N));
+	}
+	return ginvq;
+}
+
+const std::vector<int> raders_gq(int N) {
+	const int g = generator(N);
+	std::vector<int> gq;
+	for (int q = 0; q < N - 1; q++) {
+		gq.push_back(mod_pow(g, q, N));
+	}
+	return gq;
+}
+
+void fftw(std::vector<std::complex<double>>& x) {
+	const int N = x.size();
+	static std::unordered_map<int, fftw_plan> plans;
+	static std::unordered_map<int, fftw_complex*> in;
+	static std::unordered_map<int, fftw_complex*> out;
+	if (plans.find(N) == plans.end()) {
+		in[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);
+		out[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);
+		plans[N] = fftw_plan_dft_1d(N, in[N], out[N], FFTW_FORWARD, FFTW_ESTIMATE);
+	}
+	auto* i = in[N];
+	auto* o = out[N];
+	for (int n = 0; n < N; n++) {
+		i[n][0] = x[n].real();
+		i[n][1] = x[n].imag();
+	}
+	fftw_execute(plans[N]);
+	for (int n = 0; n < N; n++) {
+		x[n].real(o[n][0]);
+		x[n].imag(o[n][1]);
+	}
+
+}
+
+const std::vector<std::complex<double>> twiddles(int N) {
+	std::vector<std::complex<double>> tw(N);
+	for (int k = 0; k < N; k++) {
+		tw[k] = std::polar(1.0, -2 * M_PI * k / N);
+	}
+	return tw;
+}
+
+const std::vector<std::complex<double>> raders_four_twiddle(int N) {
+	std::vector<std::complex<double>> b(N - 1);
+	const auto tws = twiddles(N);
+	const auto ginvq = raders_ginvq(N);
+	for (int q = 0; q < N - 1; q++) {
+		b[q] = tws[ginvq[q]];
+	}
+	fftw(b);
+	return b;
+}
 
 struct cmplx {
 	math_vertex x;
@@ -31,7 +137,107 @@ struct cmplx {
 	}
 };
 
-std::vector<math_vertex> fft_prime_factor(int N1, int N2, int R1, int R2, std::vector<math_vertex> xin) {
+std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
+	if (opts & FFT_REAL) {
+		auto tmp = std::move(xin);
+		xin.resize(2 * N);
+		for (int n = 0; n < N; n++) {
+			xin[2 * n] = tmp[n];
+			xin[2 * n + 1] = math_vertex(0.0);
+		}
+	}
+	if (opts & FFT_SYM) {
+		for (int n = 1; n < N - n; n++) {
+			xin[2 * (N - n)] = xin[2 * n];
+			xin[2 * (N - n) + 1] = xin[2 * n + 1];
+		}
+	}
+	std::vector<math_vertex> xout;
+	auto pfac = prime_factorization(N);
+	if (pfac.size() == 1) {
+		int R = pfac.begin()->first;
+		if (R == 2) {
+			xout = fft_radix4(xin, N);
+		} else if (R < 29) {
+			xout = fft_prime_power(pfac.begin()->first, xin, N);
+		} else {
+			xout = fft_raders(xin, N);
+		}
+	} else {
+		int N1 = 1;
+		int N2 = 1;
+		bool flag = false;
+		for (auto i = pfac.begin(); i != pfac.end(); i++) {
+			if (flag) {
+				N2 *= std::pow(i->first, i->second);
+			} else {
+				N1 *= std::pow(i->first, i->second);
+			}
+			flag = !flag;
+		}
+		xout = fft_prime_factor(N1, N2, xin);
+	}
+	if (opts & (FFT_REAL | FFT_SYM)) {
+		auto tmp = std::move(xout);
+		xout.resize(N);
+		xout[0] = tmp[0];
+		if (N % 2 == 0) {
+			xout[N / 2] = tmp[2 * (N / 2)];
+		}
+		for (int n = 1; n < N - n; n++) {
+			xout[n] = tmp[2 * n];
+			xout[N - n] = tmp[2 * n + 1];
+		}
+		if (opts & FFT_SYM) {
+			xout.resize(N / 2 + 1);
+		}
+	}
+	return std::move(xout);
+}
+
+std::vector<math_vertex> fft_raders(std::vector<math_vertex> xin, int N) {
+	std::vector<math_vertex> xout(2 * N);
+	const auto& b = raders_four_twiddle(N);
+	const auto& gq = raders_gq(N);
+	const auto& ginvq = raders_ginvq(N);
+	std::vector<math_vertex> a(2 * (N - 1));
+	for (int q = 0; q < N - 1; q++) {
+		a[2 * q] = xin[2 * gq[q]];
+		a[2 * q + 1] = xin[2 * gq[q] + 1];
+	}
+	a = fft(a, N - 1, false);
+	for (int q = 0; q < N - 1; q++) {
+		cmplx A, B, C;
+		A.x = a[2 * q];
+		A.y = a[2 * q + 1];
+		B.x = b[q].real();
+		B.y = b[q].imag();
+		C = A * B;
+		C.y = -C.y;
+		a[2 * q] = C.x;
+		a[2 * q + 1] = C.y;
+	}
+	a = fft(a, N - 1, false);
+	const auto Nm1inv = 1.0 / (N - 1.0);
+	for (int q = 0; q < N - 1; q++) {
+		a[2 * q + 1] = a[2 * q + 1] * Nm1inv;
+		a[2 * q] = a[2 * q] * Nm1inv;
+		a[2 * q + 1] = -a[2 * q + 1];
+	}
+	xout[0] = 0.0;
+	xout[1] = 0.0;
+	for (int n = 0; n < N; n++) {
+		xout[0] += xin[2 * n];
+		xout[1] += xin[2 * n + 1];
+	}
+	for (int p = 0; p < N - 1; p++) {
+		xout[2 * ginvq[p]] = xin[0] + a[2 * p];
+		xout[2 * ginvq[p] + 1] = xin[1] + a[2 * p + 1];
+	}
+	return std::move(xout);
+}
+
+std::vector<math_vertex> fft_prime_factor(int N1, int N2, std::vector<math_vertex> xin) {
 	int N = N1 * N2;
 	std::vector<math_vertex> xout(2 * N);
 	std::vector<std::vector<math_vertex>> sub1(N1, std::vector<math_vertex>(2 * N2));
@@ -43,7 +249,7 @@ std::vector<math_vertex> fft_prime_factor(int N1, int N2, int R1, int R2, std::v
 		}
 	}
 	for (int n1 = 0; n1 < N1; n1++) {
-		sub1[n1] = ((R2 == 2) ? fft_radix4(sub1[n1], N2) : fft_prime_power(R2, sub1[n1], N2));
+		sub1[n1] = fft(sub1[n1], N2);
 	}
 	for (int n1 = 0; n1 < N1; n1++) {
 		for (int k2 = 0; k2 < N2; k2++) {
@@ -52,7 +258,7 @@ std::vector<math_vertex> fft_prime_factor(int N1, int N2, int R1, int R2, std::v
 		}
 	}
 	for (int k2 = 0; k2 < N2; k2++) {
-		sub2[k2] = ((R1 == 2) ? fft_radix4(sub2[k2], N1) : fft_prime_power(R1, sub2[k2], N1));
+		sub2[k2] = fft(sub2[k2], N1, false);
 	}
 	for (int k = 0; k < N; k++) {
 		const int k1 = k % N1;
@@ -169,36 +375,6 @@ std::vector<math_vertex> fft_singleton(std::vector<math_vertex> xin, int N) {
 		xout[2 * i + 1] = bp[i] + bm[i];
 		xout[2 * (N - i)] = ap[i] + am[i];
 		xout[2 * (N - i) + 1] = bp[i] - bm[i];
-	}
-	return xout;
-}
-
-std::vector<math_vertex> fft_radix2(std::vector<math_vertex> xin, int N) {
-	if (N == 1) {
-		return xin;
-	}
-	std::vector<math_vertex> xout(2 * N);
-	std::vector<math_vertex> even, odd;
-	for (int n = 0; n < N / 2; n++) {
-		even.push_back(xin[4 * n]);
-		even.push_back(xin[4 * n + 1]);
-	}
-	for (int n = 0; n < N / 2; n++) {
-		odd.push_back(xin[4 * n + 2]);
-		odd.push_back(xin[4 * n + 3]);
-	}
-	even = fft_radix2(even, N / 2);
-	odd = fft_radix2(odd, N / 2);
-	for (int k = 0; k < N / 2; k++) {
-		double theta = -2.0 * M_PI * k / N;
-		auto twr = math_vertex(cos(theta));
-		auto twi = math_vertex(sin(theta));
-		auto tr = odd[2 * k] * twr - odd[2 * k + 1] * twi;
-		auto ti = odd[2 * k] * twi + odd[2 * k + 1] * twr;
-		xout[2 * k] = even[2 * k] + tr;
-		xout[2 * (k + N / 2)] = even[2 * k] - tr;
-		xout[2 * k + 1] = even[2 * k + 1] + ti;
-		xout[2 * (k + N / 2) + 1] = even[2 * k + 1] - ti;
 	}
 	return xout;
 }
@@ -336,19 +512,9 @@ std::vector<math_vertex> fft_radix4(std::vector<math_vertex> xin, int N) {
 		odd3.push_back(xin[2 * (4 * n + 3)]);
 		odd3.push_back(xin[2 * (4 * n + 3) + 1]);
 	}
-	if (N == 4) {
-		even = fft_radix2(even, 2);
-		odd1 = fft_radix2(odd1, 1);
-		odd3 = fft_radix2(odd3, 1);
-	} else if (N == 8) {
-		even = fft_radix4(even, 4);
-		odd1 = fft_radix2(odd1, 2);
-		odd3 = fft_radix2(odd3, 2);
-	} else {
-		even = fft_radix4(even, N / 2);
-		odd1 = fft_radix4(odd1, N / 4);
-		odd3 = fft_radix4(odd3, N / 4);
-	}
+	even = fft_radix4(even, N / 2);
+	odd1 = fft_radix4(odd1, N / 4);
+	odd3 = fft_radix4(odd3, N / 4);
 	const auto tw_mult = [N](int k, math_vertex r, math_vertex i) {
 		std::pair<math_vertex, math_vertex> rc;
 		double theta = -2.0 * M_PI * k / N;
