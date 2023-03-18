@@ -25,6 +25,15 @@ std::vector<math_vertex> fft(std::vector<math_vertex>& xin, int N, int opts) {
 				x[N - n].y = xin[N - n];
 				x[n] = x[N - n].conj();
 			}
+		} else if (opts & FFT_DCT2) {
+			x[0].x = xin[0];
+			for (int n = 1; n < N / 4; n++) {
+				x[N - n].x = xin[n];
+				x[N - (n + N / 2)].x = -xin[n];
+			}
+			for (int n = 1; n < N - n; n++) {
+				x[n].x = x[N - n].x;
+			}
 		} else {
 			x[0].x = xin[0];
 			x[0].y = xin[1];
@@ -50,12 +59,19 @@ std::vector<math_vertex> fft(std::vector<math_vertex>& xin, int N, int opts) {
 			}
 		}
 	}
+
 	x = fft(x, N);
+
 	if (opts & FFT_INV) {
 		if (opts & FFT_REAL) {
 			xout.resize(N);
 			for (int n = 0; n < N; n++) {
 				xout[n] = x[n].x;
+			}
+		} else if (opts & FFT_DCT2) {
+			xout.resize(N / 4);
+			for (int n = 0; n < xout.size(); n++) {
+				xout[n] = x[2 * n + 1].x;
 			}
 		} else {
 			xout.resize(2 * N);
