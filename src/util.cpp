@@ -5,6 +5,127 @@
 #include <unordered_map>
 #include <map>
 #include <cmath>
+#include <set>
+#include <complex>
+#include <fftw3.h>
+
+static int mod_pow(int a, int b, int m) {
+	int rc = 1;
+	int apow = a;
+	while (b) {
+		if (b & 1) {
+			rc = ((rc % m) * (apow % m)) % m;
+		}
+		b >>= 1;
+		apow = ((apow % m) * (apow % m)) % m;
+	}
+	return rc;
+}
+
+static int mod_inv(int a, int m) {
+	return mod_pow(a, m - 2, m);
+}
+
+static int generator(int N) {
+	static thread_local std::unordered_map<int, int> values;
+	auto i = values.find(N);
+	if (i == values.end()) {
+		for (int g = 2;; g++) {
+			std::set<int> I;
+			bool fail = false;
+			for (int m = 0; m < N - 2; m++) {
+				int n = mod_pow(g, m, N);
+				if (I.find(n) == I.end()) {
+					I.insert(n);
+				} else {
+					fail = true;
+					break;
+				}
+			}
+			if (!fail) {
+				values[N] = g;
+				i = values.find(N);
+				break;
+			}
+		}
+	}
+	return i->second;
+}
+
+std::vector<int> raders_ginvq(int N) {
+	const int g = generator(N);
+	std::vector<int> ginvq;
+	for (int q = 0; q < N - 1; q++) {
+		ginvq.push_back(mod_inv(mod_pow(g, q, N), N));
+	}
+	return ginvq;
+}
+
+const std::vector<int> raders_gq(int N) {
+	const int g = generator(N);
+	std::vector<int> gq;
+	for (int q = 0; q < N - 1; q++) {
+		gq.push_back(mod_pow(g, q, N));
+	}
+	return gq;
+}
+
+void fftw(std::vector<std::complex<double>>& x) {
+	const int N = x.size();
+	static std::unordered_map<int, fftw_plan> plans;
+	static std::unordered_map<int, fftw_complex*> in;
+	static std::unordered_map<int, fftw_complex*> out;
+	if (plans.find(N) == plans.end()) {
+		in[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);
+		out[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);
+		plans[N] = fftw_plan_dft_1d(N, in[N], out[N], FFTW_FORWARD, FFTW_ESTIMATE);
+	}
+	auto* i = in[N];
+	auto* o = out[N];
+	for (int n = 0; n < N; n++) {
+		i[n][0] = x[n].real();
+		i[n][1] = x[n].imag();
+	}
+	fftw_execute(plans[N]);
+	for (int n = 0; n < N; n++) {
+		x[n].real(o[n][0]);
+		x[n].imag(o[n][1]);
+	}
+
+}
+
+const std::vector<std::complex<double>> twiddles(int N) {
+	std::vector<std::complex<double>> tw(N);
+	for (int k = 0; k < N; k++) {
+		tw[k] = std::polar(1.0, -2 * M_PI * k / N);
+	}
+	return tw;
+}
+
+const std::vector<std::complex<double>> raders_four_twiddle(int N) {
+	std::vector<std::complex<double>> b(N - 1);
+	const auto tws = twiddles(N);
+	const auto ginvq = raders_ginvq(N);
+	for (int q = 0; q < N - 1; q++) {
+		b[q] = tws[ginvq[q]] * (1.0 / (N - 1.0));
+	}
+	fftw(b);
+	return b;
+}
+
+
+const std::vector<std::complex<double>> raders_four_twiddle(int N, int M) {
+	std::vector<std::complex<double>> b(M, 0);
+	const auto tws = twiddles(N);
+	const auto ginvq = raders_ginvq(N);
+	b[0] = tws[ginvq[0]] * (1.0 / M);
+	for (int q = 1; q < N - 1; q++) {
+		b[M + q - (N - 1)] = b[q] = tws[ginvq[q]] * (1.0 / M);
+	}
+	fftw(b);
+	return b;
+}
+
 
 __int128 factorial(__int128 k) {
 	if (k <= 1) {

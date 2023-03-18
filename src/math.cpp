@@ -371,7 +371,6 @@ math_vertex::op_cnt_t math_vertex::operation_count(std::vector<math_vertex>& out
 std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 	std::string code;
 	int ncnt = 5;
-	std::vector<std::string> last_names;
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n].v.properties().out_num = n;
 	}
@@ -461,13 +460,6 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 
 		std::vector<math_vertex> in;
 		for (int i = 0; i < v.get_edge_in_count(); i++) {
-			last_names.push_back(*v.get_edge_in(i).v.properties().name);
-			if (last_names.size() > 5) {
-				for (int i = 0; i < last_names.size() - 1; i++) {
-					last_names[i] = last_names[i + 1];
-				}
-				last_names.pop_back();
-			}
 			in.push_back(v.get_edge_in(i));
 		}
 		code += v.v.properties().print_code(in);
@@ -542,6 +534,7 @@ bool math_vertex::check_cse() {
 			}
 		}
 	}
+	assert(!(neg && pos));
 	if (vacate.v != math_vertex().v) {
 		vacate.v.properties().cse = false;
 	}
@@ -633,6 +626,7 @@ math_vertex math_vertex::optimize() {
 	if (edge_count(op) >= 2) {
 		b = get_edge_in(1);
 	}
+
 	switch (op) {
 	case ADD:
 		if (a.is_constant() && b.is_constant()) {
@@ -649,8 +643,6 @@ math_vertex math_vertex::optimize() {
 			c = b;
 		} else if (b.is_zero()) {
 			c = a;
-		} else if (a.get_op() == CON && b.get_op() == CON) {
-			c = math_vertex(a.get_value() + b.get_value());
 		}
 		break;
 	case SUB:
@@ -668,8 +660,6 @@ math_vertex math_vertex::optimize() {
 			c = -b;
 		} else if (b.is_zero()) {
 			c = a;
-		} else if (a.get_op() == CON && b.get_op() == CON) {
-			c = math_vertex(a.get_value() - b.get_value());
 		}
 		break;
 	case MUL:
@@ -691,8 +681,6 @@ math_vertex math_vertex::optimize() {
 			c = -b;
 		} else if (b.is_neg_one()) {
 			c = -a;
-		} else if (a.get_op() == CON && b.get_op() == CON) {
-			c = math_vertex(a.get_value() * b.get_value());
 		}
 		break;
 	case NEG:

@@ -69,6 +69,9 @@ public:
 		int add;
 		int mul;
 		int neg;
+		int total() const {
+			return add + mul + neg;
+		}
 	};
 	struct distrib_t {
 		double c;
@@ -143,5 +146,85 @@ private:
 	static std::vector<math_vertex> essential_constants;
 	void set_database(const std::shared_ptr<name_server>& db);
 };
+
+struct cmplx {
+	math_vertex x;
+	math_vertex y;
+	cmplx() = default;
+	cmplx operator+(cmplx other) const {
+		cmplx C;
+		C.x = x + other.x;
+		C.y = y + other.y;
+		return C;
+	}
+	cmplx operator-(cmplx other) const {
+		cmplx C;
+		C.x = x - other.x;
+		C.y = y - other.y;
+		return C;
+	}
+	cmplx operator-() const {
+		cmplx C;
+		C.x = -x;
+		C.y = -y;
+		return C;
+	}
+	cmplx operator*(math_vertex other) const {
+		cmplx C;
+		C.x = x * other;
+		C.y = y * other;
+		return C;
+	}
+	cmplx conj() const {
+		cmplx C;
+		C.x = x;
+		C.y = -y;
+		return C;
+	}
+	cmplx operator*(cmplx other) const {
+		cmplx C;
+		C.x = x * other.x - y * other.y;
+		C.y = x * other.y + y * other.x;
+		return C;
+	}
+	cmplx operator+=(cmplx other) {
+		*this = *this + other;
+		return *this;
+	}
+	cmplx operator-=(cmplx other) {
+		*this = *this - other;
+		return *this;
+	}
+	cmplx operator*=(cmplx other) {
+		*this = *this * other;
+		return *this;
+	}
+	cmplx operator*=(math_vertex other) {
+		*this = *this * other;
+		return *this;
+	}
+	cmplx& operator=(const cmplx&) = default;
+	cmplx& operator=(const std::complex<double>& a) {
+		x = a.real();
+		y = a.imag();
+		return *this;
+	}
+	cmplx(std::complex<double> a) {
+		x = a.real();
+		y = a.imag();
+	}
+};
+
+inline cmplx operator*(math_vertex a, cmplx b) {
+	return b * a;
+}
+
+inline cmplx twiddle(int nk, int N) {
+	cmplx C;
+	const double theta = -2.0 * M_PI * nk / N;
+	C.x = cos(theta);
+	C.y = sin(theta);
+	return C;
+}
 
 #endif /* MATH_HPP_ */
