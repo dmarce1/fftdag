@@ -14,44 +14,78 @@ std::vector<cmplx> fft(std::vector<cmplx>& xin, int N, int opts = 0);
 std::vector<math_vertex> fft(std::vector<math_vertex>& xin, int N, int opts) {
 	std::vector<cmplx> x(N, cmplx( { 0.0, 0.0 }));
 	std::vector<math_vertex> xout;
-	if (opts & FFT_REAL) {
-		auto tmp = std::move(xin);
-		for (int n = 0; n < N; n++) {
-			x[n].x = tmp[n];
-		}
-	} else if (opts & FFT_DCT2) {
-		auto tmp = std::move(xin);
-		for (int n = 1; n < N - n; n += 2) {
-			x[n].x = tmp[(n - 1) / 2];
-			x[N - n].x = tmp[(n - 1) / 2];
+	if (opts & FFT_INV) {
+		if (opts & FFT_REAL) {
+			x[0].x = xin[0];
+			if (N % 2 == 0) {
+				x[N / 2].x = xin[N / 2];
+			}
+			for (int n = 1; n < N - n; n++) {
+				x[N - n].x = xin[n];
+				x[N - n].y = xin[N - n];
+				x[n] = x[N - n].conj();
+			}
+		} else {
+			x[0].x = xin[0];
+			x[0].y = xin[1];
+			for (int n = 1; n < N; n++) {
+				x[n].x = xin[2 * (N - n)];
+				x[n].y = xin[2 * (N - n) + 1];
+			}
 		}
 	} else {
-		for (int n = 0; n < N; n++) {
-			x[n].x = xin[2 * n];
-			x[n].y = xin[2 * n + 1];
+		if (opts & FFT_REAL) {
+			for (int n = 0; n < N; n++) {
+				x[n].x = xin[n];
+			}
+		} else if (opts & FFT_DCT2) {
+			for (int n = 1; n < N - n; n += 2) {
+				x[n].x = xin[(n - 1) / 2];
+				x[N - n].x = xin[(n - 1) / 2];
+			}
+		} else {
+			for (int n = 0; n < N; n++) {
+				x[n].x = xin[2 * n];
+				x[n].y = xin[2 * n + 1];
+			}
 		}
 	}
 	x = fft(x, N);
-	if (opts & FFT_REAL) {
-		xout.resize(N);
-		xout[0] = x[0].x;
-		if (N % 2 == 0) {
-			xout[N / 2] = x[N / 2].x;
-		}
-		for (int n = 1; n < N - n; n++) {
-			xout[n] = x[n].x;
-			xout[N - n] = x[n].y;
-		}
-	} else if (opts & FFT_DCT2) {
-		xout.resize(N / 4);
-		for (int n = 0; n < xout.size(); n++) {
-			xout[n] = x[n].x;
+	if (opts & FFT_INV) {
+		if (opts & FFT_REAL) {
+			xout.resize(N);
+			for (int n = 0; n < N; n++) {
+				xout[n] = x[n].x;
+			}
+		} else {
+			xout.resize(2 * N);
+			for (int n = 0; n < N; n++) {
+				xout[2 * n] = x[n].x;
+				xout[2 * n + 1] = x[n].y;
+			}
 		}
 	} else {
-		xout.resize(2 * N);
-		for (int n = 0; n < N; n++) {
-			xout[2 * n] = x[n].x;
-			xout[2 * n + 1] = x[n].y;
+		if (opts & FFT_REAL) {
+			xout.resize(N);
+			xout[0] = x[0].x;
+			if (N % 2 == 0) {
+				xout[N / 2] = x[N / 2].x;
+			}
+			for (int n = 1; n < N - n; n++) {
+				xout[n] = x[n].x;
+				xout[N - n] = x[n].y;
+			}
+		} else if (opts & FFT_DCT2) {
+			xout.resize(N / 4);
+			for (int n = 0; n < xout.size(); n++) {
+				xout[n] = x[n].x;
+			}
+		} else {
+			xout.resize(2 * N);
+			for (int n = 0; n < N; n++) {
+				xout[2 * n] = x[n].x;
+				xout[2 * n + 1] = x[n].y;
+			}
 		}
 	}
 	return std::move(xout);
@@ -98,9 +132,6 @@ std::vector<cmplx> fft(std::vector<cmplx>& xin, int N, int opts) {
 		}
 	}
 	return std::move(xout);
-}
-
-void fft_preprocess(std::vector<cmplx>& xin, int N, int opts) {
 }
 
 std::vector<cmplx> fft_radix4(std::vector<cmplx> xin, int N, int opts) {
@@ -201,7 +232,8 @@ std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opt
 				const auto w = twiddle(n1 * (N2 * k1 + k2), N);
 				const auto t_0 = sub[I1(n1)][k2];
 				const auto t_1 = sub[I1(-n1)][k2];
-				x.x = x.x + w.x * (t_0.x + t_1.x) + w.y * (t_1.y - t_0.y);;
+				x.x = x.x + w.x * (t_0.x + t_1.x) + w.y * (t_1.y - t_0.y);
+				;
 				x.y = x.y + w.x * (t_0.y + t_1.y) + w.y * (t_0.x - t_1.x);
 			}
 			xout[I0(k2 + k1 * N2)].x += x.x;
@@ -213,17 +245,11 @@ std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opt
 	return xout;
 }
 
-std::vector<cmplx> fft_singleton(std::vector<cmplx> xin_cmplx, int N, int opts) {
+std::vector<cmplx> fft_singleton(std::vector<cmplx> xin, int N, int opts) {
 	const int M = (N - 1) / 2;
-	std::vector<cmplx> xout_cmplx(N);
-	std::vector<math_vertex> xout(2 * N);
-	std::vector<math_vertex> xin(2 * N);
-	for (int n = 0; n < N; n++) {
-		xin[2 * n] = xin_cmplx[n].x;
-		xin[2 * n + 1] = xin_cmplx[n].y;
-	}
-	std::vector<math_vertex> tp(M + 1);
-	std::vector<math_vertex> tm(M + 1);
+	std::vector<cmplx> xout(N);
+	std::vector<cmplx> tp(M + 1);
+	std::vector<cmplx> tm(M + 1);
 	std::vector<math_vertex> up(M + 1);
 	std::vector<math_vertex> um(M + 1);
 	std::vector<math_vertex> ap(M + 1);
@@ -233,10 +259,8 @@ std::vector<cmplx> fft_singleton(std::vector<cmplx> xin_cmplx, int N, int opts) 
 	std::vector<std::vector<bool>> pc(M + 1, std::vector<bool>(M + 1, false));
 	std::vector<bool> xc(M + 1, false);
 	for (int j = 1; j <= M; j++) {
-		tp[j] = xin[2 * j] + xin[2 * (N - j)];
-		tm[j] = xin[2 * j] - xin[2 * (N - j)];
-		up[j] = xin[2 * j + 1] + xin[2 * (N - j) + 1];
-		um[j] = xin[2 * j + 1] - xin[2 * (N - j) + 1];
+		tp[j] = xin[j] + xin[N - j];
+		tm[j] = xin[j] - xin[N - j];
 	}
 	for (int i = 1; i <= M; i++) {
 		am[i] = 0.0;
@@ -244,8 +268,7 @@ std::vector<cmplx> fft_singleton(std::vector<cmplx> xin_cmplx, int N, int opts) 
 		ap[i] = 0.0;
 		bp[i] = 0.0;
 	}
-	xout[0] = math_vertex(0.0);
-	xout[1] = math_vertex(0.0);
+	xout[0] = cmplx( { 0.0, 0.0 });
 	std::vector<bool> first(M + 1, true);
 	for (int i0 = 1; i0 <= M; i0++) {
 		for (int j0 = 1; j0 <= M; j0++) {
@@ -261,22 +284,18 @@ std::vector<cmplx> fft_singleton(std::vector<cmplx> xin_cmplx, int N, int opts) 
 							double c1 = c01;
 							math_vertex a = math_vertex(0.5 * (c0 + c1));
 							math_vertex b = math_vertex(0.5 * (c0 - c1));
-							math_vertex s0 = (tp[j0] + tp[j1]);
-							math_vertex s1 = (tp[j0] - tp[j1]);
-							math_vertex r0 = (up[j0] + up[j1]);
-							math_vertex r1 = (up[j0] - up[j1]);
+							cmplx s0 = (tp[j0] + tp[j1]);
+							cmplx s1 = (tp[j0] - tp[j1]);
 							bool f = first[i0] && first[i1];
-							auto as0 = (f ? xin[0] : math_vertex(0.0)) + a * s0;
-							auto ar0 = (f ? xin[1] : math_vertex(0.0)) + a * r0;
+							auto as0 = (f ? xin[0] : cmplx( { 0.0, 0.0 })) + a * s0;
 							first[i0] = false;
 							first[i1] = false;
-							ap[i0] += as0 + b * s1;
-							ap[i1] += as0 - b * s1;
-							bp[i0] += ar0 + b * r1;
-							bp[i1] += ar0 - b * r1;
+							ap[i0] += as0.x + b * s1.x;
+							ap[i1] += as0.x - b * s1.x;
+							bp[i0] += as0.y + b * s1.y;
+							bp[i1] += as0.y - b * s1.y;
 							if (!xc[j0] && !xc[j1]) {
 								xout[0] += s0;
-								xout[1] += r0;
 								xc[j0] = true;
 								xc[j1] = true;
 							}
@@ -294,43 +313,37 @@ std::vector<cmplx> fft_singleton(std::vector<cmplx> xin_cmplx, int N, int opts) 
 		for (int j = 1; j <= M; j++) {
 			auto co = cos(2.0 * M_PI * j * i / N);
 			if (!pc[i][j]) {
-				ap[i] += tp[j] * co;
-				bp[i] += up[j] * co;
+				ap[i] += tp[j].x * co;
+				bp[i] += tp[j].y * co;
 			}
 		}
 	}
 	for (int i = 1; i <= M; i++) {
 		if (!xc[i]) {
 			xout[0] += tp[i];
-			xout[1] += up[i];
 		}
 	}
 	xout[0] += xin[0];
-	xout[1] += xin[1];
 	for (int i = 1; i <= M; i++) {
 		for (int j = 1; j <= M; j++) {
 			auto si = sin(2.0 * M_PI * j * i / N);
-			am[i] -= um[j] * si;
-			bm[i] -= tm[j] * si;
+			am[i] -= tm[j].y * si;
+			bm[i] -= tm[j].x * si;
 		}
 	}
 	for (int i = 1; i <= M; i++) {
 		if (first[i]) {
-			ap[i] += xin[0];
-			bp[i] += xin[1];
+			ap[i] += xin[0].x;
+			bp[i] += xin[0].y;
 		}
 	}
 	for (int i = 1; i <= M; i++) {
-		xout[2 * i] = ap[i] - am[i];
-		xout[2 * i + 1] = bp[i] + bm[i];
-		xout[2 * (N - i)] = ap[i] + am[i];
-		xout[2 * (N - i) + 1] = bp[i] - bm[i];
+		xout[i].x = ap[i] - am[i];
+		xout[i].y = bp[i] + bm[i];
+		xout[N - i].x = ap[i] + am[i];
+		xout[N - i].y = bp[i] - bm[i];
 	}
-	for (int n = 0; n < N; n++) {
-		xout_cmplx[n].x = xout[2 * n];
-		xout_cmplx[n].y = xout[2 * n + 1];
-	}
-	return xout_cmplx;
+	return std::move(xout);
 }
 
 std::vector<cmplx> fft_prime_factor(int N1, int N2, std::vector<cmplx> xin, int opts) {

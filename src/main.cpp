@@ -4,8 +4,8 @@
 #include <time.h>
 #include "util.hpp"
 
-constexpr int Nmin = 9;
-constexpr int Nmax = 9;
+constexpr int Nmin = 2;
+constexpr int Nmax = 32;
 
 int main(int argc, char **argv) {
 
@@ -23,6 +23,20 @@ int main(int argc, char **argv) {
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 	}
+	fprintf( stderr, "------------------------------COMPLEX INVERSE-----------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(2 * N);
+		auto outputs = fft(inputs, N, FFT_INV);
+		auto cnt = math_vertex::operation_count(outputs);
+		inputs.clear();
+		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
+		auto code = math_vertex::execute_all(outputs);
+		std::string fname = "fft.complex_inv." + std::to_string(N) + ".cpp";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		code = std::string("\n\nvoid fft_complex_inv_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+	}
 	fprintf( stderr, "------------------------------REAL--------------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(N);
@@ -34,6 +48,20 @@ int main(int argc, char **argv) {
 		std::string fname = "fft.real." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		code = std::string("\n\nvoid fft_real_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+	}
+	fprintf( stderr, "------------------------------REAL INVERSE-------------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(N);
+		auto outputs = fft(inputs, N, FFT_REAL | FFT_INV);
+		auto cnt = math_vertex::operation_count(outputs);
+		inputs.clear();
+		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
+		auto code = math_vertex::execute_all(outputs);
+		std::string fname = "fft.real_inv." + std::to_string(N) + ".cpp";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		code = std::string("\n\nvoid fft_real_inv_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 	}
@@ -62,13 +90,21 @@ int main(int argc, char **argv) {
 		fprintf(fp, "void fft_complex_%i(double*);\n", N);
 	}
 	for (int N = Nmin; N <= Nmax; N++) {
+		fprintf(fp, "void fft_complex_inv_%i(double*);\n", N);
+	}
+	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void fft_real_%i(double*);\n", N);
+	}
+	for (int N = Nmin; N <= Nmax; N++) {
+		fprintf(fp, "void fft_real_inv_%i(double*);\n", N);
 	}
 	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void fft_dct2_%i(double*);\n", N);
 	}
 	fprintf(fp, "\n\nvoid fft_complex(double*, int);\n");
+	fprintf(fp, "\n\nvoid fft_complex_inv(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_real(double*, int);\n");
+	fprintf(fp, "\n\nvoid fft_real_inv(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_dct2(double*, int);\n");
 	fprintf(fp, "\n\n");
 	fclose(fp);
@@ -91,6 +127,21 @@ int main(int argc, char **argv) {
 		}
 	}
 	fprintf(fp, "\n};\n\n");
+	fprintf(fp, "fft_type fft_complex_inv_pointer[FFT_NMAX + 1] = {");
+	for (int N = 0; N <= Nmax; N++) {
+		if (N % 8 == 0) {
+			fprintf(fp, "\n\t");
+		}
+		if (N < Nmin) {
+			fprintf(fp, "nullptr");
+		} else {
+			fprintf(fp, "&fft_complex_inv_%i", N);
+		}
+		if (N != Nmax) {
+			fprintf(fp, ", ");
+		}
+	}
+	fprintf(fp, "\n};\n\n");
 	fprintf(fp, "fft_type fft_real_pointer[FFT_NMAX + 1] = {");
 	for (int N = 0; N <= Nmax; N++) {
 		if (N % 8 == 0) {
@@ -100,6 +151,21 @@ int main(int argc, char **argv) {
 			fprintf(fp, "nullptr");
 		} else {
 			fprintf(fp, "&fft_real_%i", N);
+		}
+		if (N != Nmax) {
+			fprintf(fp, ", ");
+		}
+	}
+	fprintf(fp, "\n};\n\n");
+	fprintf(fp, "fft_type fft_real_inv_pointer[FFT_NMAX + 1] = {");
+	for (int N = 0; N <= Nmax; N++) {
+		if (N % 8 == 0) {
+			fprintf(fp, "\n\t");
+		}
+		if (N < Nmin) {
+			fprintf(fp, "nullptr");
+		} else {
+			fprintf(fp, "&fft_real_inv_%i", N);
 		}
 		if (N != Nmax) {
 			fprintf(fp, ", ");
@@ -124,8 +190,14 @@ int main(int argc, char **argv) {
 	fprintf(fp, "void fft_complex(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_complex_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
+	fprintf(fp, "void fft_complex_inv(double* x, int N) {\n");
+	fprintf(fp, "\t(*fft_complex_inv_pointer[N])(x);\n");
+	fprintf(fp, "}\n\n\n");
 	fprintf(fp, "void fft_real(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_real_pointer[N])(x);\n");
+	fprintf(fp, "}\n\n\n");
+	fprintf(fp, "void fft_real_inv(double* x, int N) {\n");
+	fprintf(fp, "\t(*fft_real_inv_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
 	fprintf(fp, "void fft_dct2(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_dct2_pointer[N])(x);\n");
@@ -143,7 +215,13 @@ int main(int argc, char **argv) {
 		fprintf(fp, "fft.complex.%i.o ", n);
 	}
 	for (int n = Nmin; n <= Nmax; n++) {
+		fprintf(fp, "fft.complex_inv.%i.o ", n);
+	}
+	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.real.%i.o ", n);
+	}
+	for (int n = Nmin; n <= Nmax; n++) {
+		fprintf(fp, "fft.real_inv.%i.o ", n);
 	}
 	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.dct2.%i.o ", n);
