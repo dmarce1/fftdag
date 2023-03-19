@@ -49,6 +49,7 @@ public:
 		int out_num;
 		bool cse;
 		int depth;
+		int group_id;
 		std::shared_ptr<value_number> vnum;
 		std::string print_code(const std::vector<math_vertex>& edges);
 		properties();
@@ -80,6 +81,9 @@ public:
 	struct key {
 		size_t operator()(const math_vertex&) const;
 	};
+	operator dag_vertex<properties>() const;
+	void set_group_id(int id);
+	int get_group_id() const;
 	math_vertex(const weak_ref& ref);
 	bool operator<(const math_vertex& other) const;
 	bool operator==(const math_vertex& other) const;

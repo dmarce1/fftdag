@@ -11,7 +11,13 @@ std::vector<cmplx> fft_prime_factor(int N1, int N2, std::vector<cmplx> xin, int 
 std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int opts = 0);
 std::vector<cmplx> fft(std::vector<cmplx>& xin, int N, int opts = 0);
 
+static int next_group = 1;
+
 std::vector<math_vertex> fft(std::vector<math_vertex>& xin, int N, int opts) {
+	int group = next_group++;
+	for (auto v : xin) {
+		v.set_group_id(group);
+	}
 	std::vector<cmplx> x(N, cmplx( { 0.0, 0.0 }));
 	std::vector<math_vertex> xout;
 	if (opts & FFT_INV) {
@@ -111,6 +117,11 @@ std::vector<cmplx> fft(std::vector<cmplx>& xin, int N, int opts) {
 	if (N == 1) {
 		return xin;
 	}
+	int group = next_group++;
+	for (auto v : xin) {
+		v.x.set_group_id(group);
+		v.y.set_group_id(group);
+	}
 	std::vector<cmplx> xout;
 	auto pfac = prime_factorization(N);
 	if (pfac.size() == 1) {
@@ -146,6 +157,11 @@ std::vector<cmplx> fft(std::vector<cmplx>& xin, int N, int opts) {
 			}
 			xout = fft_prime_factor(N1, N2, xin);
 		}
+	}
+	group = next_group++;
+	for (auto v : xout) {
+		v.x.set_group_id(group);
+		v.y.set_group_id(group);
 	}
 	return std::move(xout);
 }

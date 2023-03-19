@@ -96,6 +96,7 @@ math_vertex::properties::properties() {
 	out_num = -1;
 	cse = false;
 	depth = 0;
+	group_id = -1;
 }
 
 bool math_vertex::valid() const {
@@ -182,6 +183,7 @@ math_vertex math_vertex::binary_op(operation_t op, math_vertex A, math_vertex B)
 	A.set_database(db);
 	B.set_database(db);
 	C.set_database(db);
+	C.set_group_id(A.get_group_id());
 	C.v.add_edge_in(A.v);
 	C.v.add_edge_in(B.v);
 	C = C.optimize();
@@ -197,6 +199,7 @@ math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 	C.v.properties().depth = A.v.properties().depth + 1;
 	auto db = A.v.properties().names;
 	A.set_database(db);
+	C.set_group_id(A.get_group_id());
 	C.set_database(db);
 	C.v.add_edge_in(A.v);
 	C = C.optimize();
@@ -368,6 +371,18 @@ math_vertex::op_cnt_t math_vertex::operation_count(std::vector<math_vertex>& out
 	return cnt;
 }
 
+void math_vertex::set_group_id(int id) {
+	v.properties().group_id = id;
+}
+
+math_vertex::operator dag_vertex<math_vertex::properties>() const {
+	return v;
+}
+
+int math_vertex::get_group_id() const {
+	return v.properties().group_id;
+}
+
 std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 	std::string code;
 	int ncnt = 5;
@@ -405,6 +420,8 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 			done.insert(node);
 		}
 	}
+	std::vector<std::string> last_names;
+	int last_group = -1;
 	while (42) {
 		std::vector<math_vertex> candidates;
 		for (int i = 0; i < nodes.size(); i++) {
@@ -428,7 +445,7 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 		if (!candidates.size()) {
 			break;
 		}
-		int best_score = 0;
+		int best_score = -100000000;
 		int best_index;
 		for (int i = 0; i < candidates.size(); i++) {
 			int score = 10000;
@@ -438,10 +455,21 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 				auto edge = c.get_edge_in(j);
 				if (edge.v.use_count() <= 2) {
 					score += 1000;
+				} else if (edge.v.use_count() <= 3) {
+					score += 500;
 				}
 			}
 			score -= 100 * c.v.use_count();
 			score -= c.v.properties().depth;
+			int d = std::numeric_limits<int>::max();
+			for (int k = 0; k < c.get_edge_in_count(); k++) {
+				auto ei = c.get_edge_in(k);
+				for (int j = 0; j < last_names.size(); j++) {
+					d = std::min(d, distance(*ei.v.properties().name, last_names[j]));
+				}
+			}
+			d = 64 * std::min(d, 64);
+			score -= d;
 			if (score > best_score) {
 				best_score = score;
 				best_index = i;
@@ -457,10 +485,18 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 				break;
 			}
 		}
-
+		//	fprintf(stderr, "%i\n", v.get_group_id());
 		std::vector<math_vertex> in;
-		for (int i = 0; i < v.get_edge_in_count(); i++) {
-			in.push_back(v.get_edge_in(i));
+		for (int k = 0; k < v.get_edge_in_count(); k++) {
+			in.push_back(v.get_edge_in(k));
+			last_names.push_back(*v.get_edge_in(k).v.properties().name);
+		}
+		//	last_group = v.get_group_id();
+		while (last_names.size() > 4) {
+			for (int j = 1; j < last_names.size(); j++) {
+				last_names[j - 1] = std::move(last_names[j]);
+			}
+			last_names.pop_back();
 		}
 		code += v.v.properties().print_code(in);
 		v.v.free_edges();
@@ -627,69 +663,140 @@ math_vertex math_vertex::optimize() {
 		b = get_edge_in(1);
 	}
 
+	bool flag = false;
 	switch (op) {
 	case ADD:
 		if (a.is_constant() && b.is_constant()) {
 			c = math_vertex(a.get_value() + b.get_value());
+			flag = true;
 		} else if (a == b) {
 			c = a * math_vertex(2.0);
+			flag = true;
 		} else if (a.is_neg() && b.is_neg()) {
 			c = -(a.get_neg() + b.get_neg());
+			flag = true;
 		} else if (a.is_neg()) {
 			c = b - a.get_neg();
+			flag = true;
 		} else if (b.is_neg()) {
 			c = a - b.get_neg();
+			flag = true;
 		} else if (a.is_zero()) {
 			c = b;
+			flag = true;
 		} else if (b.is_zero()) {
 			c = a;
+			flag = true;
 		}
 		break;
 	case SUB:
 		if (a.is_constant() && b.is_constant()) {
 			c = math_vertex(a.get_value() - b.get_value());
+			flag = true;
 		} else if (a == b) {
 			c = math_vertex(0.0);
+			flag = true;
 		} else if (a.is_neg() && b.is_neg()) {
 			c = b.get_neg() - a.get_neg();
+			flag = true;
 		} else if (a.is_neg()) {
 			c = -(a.get_neg() + b);
+			flag = true;
 		} else if (b.is_neg()) {
 			c = b.get_neg() + a;
+			flag = true;
 		} else if (a.is_zero()) {
 			c = -b;
+			flag = true;
 		} else if (b.is_zero()) {
 			c = a;
+			flag = true;
 		}
 		break;
 	case MUL:
 		if (a.is_constant() && b.is_constant()) {
 			c = math_vertex(a.get_value() * b.get_value());
+			flag = true;
 		} else if (a.is_neg() && b.is_neg()) {
 			c = a.get_neg() * b.get_neg();
+			flag = true;
 		} else if (a.is_neg()) {
 			c = -(a.get_neg() * b);
+			flag = true;
 		} else if (b.is_neg()) {
 			c = -(b.get_neg() * a);
+			flag = true;
 		} else if (a.is_zero() || b.is_zero()) {
 			c = 0.0;
+			flag = true;
 		} else if (a.is_one()) {
 			c = b;
+			flag = true;
 		} else if (b.is_one()) {
 			c = a;
+			flag = true;
 		} else if (a.is_neg_one()) {
 			c = -b;
+			flag = true;
 		} else if (b.is_neg_one()) {
 			c = -a;
+			flag = true;
 		}
 		break;
 	case NEG:
 		if (a.is_neg()) {
 			c = a.get_neg();
+			flag = true;
 		}
 		break;
 	default:
 		break;
+	}
+	if (!flag) {
+		if (is_additive(op)) {
+			if (a.get_op() == MUL && b.get_op() != MUL) {
+				std::swap(a, b);
+			}
+			if (b.get_op() == MUL) {
+				auto b0 = b.get_edge_in(0);
+				auto b1 = b.get_edge_in(1);
+				if (b1.get_op() == CON) {
+					std::swap(b0, b1);
+				}
+				if (a.get_op() != MUL) {
+					if (a.get_op() != CON && b0.get_op() == CON && b1.get_op() != CON) {
+						if (a == b1) {
+							if (op == ADD) {
+								c = (1.0 + b0.get_value()) * a;
+							} else {
+								c = (1.0 - b0.get_value()) * a;
+							}
+						}
+					}
+				} else {
+					auto a0 = a.get_edge_in(0);
+					auto a1 = a.get_edge_in(1);
+					if (a1.get_op() == CON) {
+						std::swap(a0, a1);
+					}
+					if (a0.get_op() == CON && b0.get_op() == CON && a1.get_op() != CON && b1.get_op() != CON) {
+						if (a1 == b1) {
+							if (op == ADD) {
+								c = (a0.get_value() + b0.get_value()) * a1;
+							} else {
+								c = (a0.get_value() - b0.get_value()) * a1;
+							}
+						} else if (a0.get_op() == CON && b0.get_op() == CON) {
+							if ((close2(a0.get_value(), b0.get_value()) && (op == ADD)) && (close2(a0.get_value(), -b0.get_value()) && (op == SUB))) {
+								c = a0.get_value() * (a1 + b1);
+							} else if ((close2(a0.get_value(), -b0.get_value()) && (op == SUB)) && (close2(a0.get_value(), b0.get_value()) && (op == ADD))) {
+								c = a0.get_value() * (a1 - b1);
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	return c;
 }

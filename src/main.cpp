@@ -1,13 +1,29 @@
 #include "dag.hpp"
 #include "fft.hpp"
+#include "util.hpp"
+#include "pebble.hpp"
 
 #include <time.h>
-#include "util.hpp"
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 128;
+constexpr int Nmax = 64;
 
 int main(int argc, char **argv) {
+	int N = 8;
+	auto inputs = math_vertex::new_inputs(2 * N);
+	auto outputs = fft(inputs, N, 0);
+	std::vector<dag_vertex<math_vertex::properties>> vin, vout;
+	for (auto i : inputs) {
+		vin.push_back(i);
+	}
+	for (auto o : outputs) {
+		vout.push_back(o);
+	}
+	pebble_game<math_vertex::properties> game(vin, vout);
+	int score = game.search();
+	fprintf(stderr, "score = %i\n", score);
+
+	abort();
 
 	fprintf( stderr, "------------------------------COMPLEX-----------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
