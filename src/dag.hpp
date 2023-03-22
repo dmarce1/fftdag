@@ -25,6 +25,7 @@ private:
 	struct state {
 		int id;
 		Properties props;
+		int score;
 		std::vector<dag_vertex> edges_in;
 	};
 	std::shared_ptr<state> state_ptr;
@@ -48,6 +49,39 @@ public:
 			free = f;
 		}
 	};
+	int compute_labels(executor& exe, bool left_desc = false) {
+		if (exe.touched.find(state_ptr->id) == exe.touched.end()) {
+			auto& edges_in = state_ptr->edges_in;
+			if (edges_in.size() == 2) {
+				std::vector<int> cscores;
+				left_desc = true;
+				for (auto& c : edges_in) {
+					if (exe.touched.find(c.state_ptr->id) == exe.touched.end()) {
+						int ci = c.compute_labels(exe, left_desc);
+						cscores.push_back(ci);
+						left_desc = false;
+					}
+				}
+				if (cscores.size() == 2) {
+					if (cscores[0] != cscores[1]) {
+						state_ptr->score = std::max(cscores[0], cscores[1]);
+					} else {
+						state_ptr->score = cscores[0] + 1;
+					}
+				} else if (cscores.size()) {
+					state_ptr->score = cscores[0];
+				} else {
+					state_ptr->score = 0;
+				}
+			} else if (edges_in.size() == 1) {
+				state_ptr->score = get_edge_in(0).compute_labels(exe, true);
+			} else {
+				state_ptr->score = left_desc ? 1 : 0;
+			}
+			exe.touched.insert(state_ptr->id);
+		}
+		return state_ptr->score;
+	}
 public:
 	class weak_ref {
 		std::weak_ptr<state> ptr;
@@ -114,7 +148,6 @@ public:
 	std::vector<dag_vertex> sort(executor& exe) {
 		std::vector<dag_vertex> list;
 		if (exe.touched.find(state_ptr->id) == exe.touched.end()) {
-			std::vector<Properties> props;
 			auto& edges_in = state_ptr->edges_in;
 			for (auto& e : edges_in) {
 				auto tmp = e.sort(exe);
@@ -130,6 +163,39 @@ public:
 		executor touched;
 		for (auto o : outputs) {
 			auto tmp = o.sort(exe);
+			list.insert(list.end(), tmp.begin(), tmp.end());
+		}
+		return std::move(list);
+	}
+	std::vector<dag_vertex> pebble_game_sort(executor& exe) {
+		std::vector<dag_vertex> list;
+		if (exe.touched.find(state_ptr->id) == exe.touched.end()) {
+			auto edges_in = state_ptr->edges_in;
+			std::sort(edges_in.begin(), edges_in.end(), [](dag_vertex a, dag_vertex b) {
+				return a.state_ptr->score > b.state_ptr->score;
+			});
+			if (edges_in.size() == 2) {
+				if (edges_in[1].state_ptr->score >= edges_in[0].state_ptr->score) {
+					std::swap(edges_in[1], edges_in[0]);
+				}
+			}
+			for (auto& e : edges_in) {
+				auto tmp = e.pebble_game_sort(exe);
+				list.insert(list.end(), tmp.begin(), tmp.end());
+			}
+			list.push_back(*this);
+			exe.touched.insert(state_ptr->id);
+		}
+		return std::move(list);
+	}
+	static std::vector<dag_vertex> pebble_game_sort(executor& exe, std::vector<dag_vertex>& outputs) {
+		for (auto o : outputs) {
+			o.compute_labels(exe);
+		}
+		exe = executor();
+		std::vector<dag_vertex> list;
+		for (auto o : outputs) {
+			auto tmp = o.pebble_game_sort(exe);
 			list.insert(list.end(), tmp.begin(), tmp.end());
 		}
 		return std::move(list);
@@ -202,6 +268,5 @@ public:
 
 template<class Properties>
 int dag_vertex<Properties>::next_id = 1;
-
 
 #endif /* FFTDAG_HPP_ */

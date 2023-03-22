@@ -70,6 +70,10 @@ std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts) {
 		xout[k + 2 * N / 4] = u0[k + 0 / 4] - 1 * (wp * zp[k] + wn * zn[k]);
 		xout[k + 3 * N / 4] = u0[k + N / 4] + I * (wp * zp[k] - wn * zn[k]);
 	}
+	for (auto x : xout) {
+		x.x.set_goal();
+		x.y.set_goal();
+	}
 	return std::move(xout);
 }
 
@@ -100,7 +104,11 @@ std::vector<cmplx> fft_modsplitS(std::vector<cmplx> xin, int N) {
 		xout[k + 2 * N / 4] = u0[k + 0 / 4] - 1 * (tp * zp[k] + tn * zn[k]);
 		xout[k + 3 * N / 4] = u0[k + N / 4] + I * (tp * zp[k] - tn * zn[k]);
 	}
-	return std::move(xout);
+	for (auto x : xout) {
+		x.x.set_goal();
+		x.y.set_goal();
+	}
+return std::move(xout);
 }
 
 std::vector<cmplx> fft_modsplitS2(std::vector<cmplx> xin, int N) {
@@ -129,6 +137,10 @@ std::vector<cmplx> fft_modsplitS2(std::vector<cmplx> xin, int N) {
 		xout[k + 1 * N / 4] = u0[k + N / 4] - I * (tp * zp[k] - tn * zn[k]) * (scale_factor(N, k) / scale_factor(2 * N, k + N / 4));
 		xout[k + 2 * N / 4] = u0[k + 0 / 4] - 1 * (tp * zp[k] + tn * zn[k]) * (scale_factor(N, k) / scale_factor(2 * N, k + 0 / 4));
 		xout[k + 3 * N / 4] = u0[k + N / 4] + I * (tp * zp[k] - tn * zn[k]) * (scale_factor(N, k) / scale_factor(2 * N, k + N / 4));
+	}
+	for (auto x : xout) {
+		x.x.set_goal();
+		x.y.set_goal();
 	}
 	return std::move(xout);
 }
@@ -163,6 +175,10 @@ std::vector<cmplx> fft_modsplitS4(std::vector<cmplx> xin, int N) {
 		xout[k + 1 * N / 4] = (u0[k + N / 4] - I * (tp * zp[k] - tn * zn[k])) * (scale_factor(N, k) / scale_factor(4 * N, k + 1 * N / 4));
 		xout[k + 2 * N / 4] = (u0[k + 0 / 4] - 1 * (tp * zp[k] + tn * zn[k])) * (scale_factor(N, k) / scale_factor(4 * N, k + 2 * N / 4));
 		xout[k + 3 * N / 4] = (u0[k + N / 4] + I * (tp * zp[k] - tn * zn[k])) * (scale_factor(N, k) / scale_factor(4 * N, k + 3 * N / 4));
+	}
+	for (auto x : xout) {
+		x.x.set_goal();
+		x.y.set_goal();
 	}
 	return std::move(xout);
 }

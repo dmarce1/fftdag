@@ -50,6 +50,7 @@ public:
 		bool cse;
 		int depth;
 		int group_id;
+		bool goal;
 		std::shared_ptr<value_number> vnum;
 		std::string print_code(const std::vector<math_vertex>& edges);
 		properties();
@@ -88,7 +89,15 @@ public:
 	bool operator<(const math_vertex& other) const;
 	bool operator==(const math_vertex& other) const;
 	math_vertex optimize();
+	int get_unique_id() const {
+		return v.get_unique_id();
+	}
 	~math_vertex();
+	void set_goal() {
+		if (get_op() != CON && get_op() != IN) {
+			v.properties().goal = true;
+		}
+	}
 	bool is_neg() const;
 	math_vertex get_neg() const;
 	bool is_zero() const;
@@ -125,7 +134,7 @@ public:
 	static math_vertex new_input(std::shared_ptr<name_server> db, std::string&& name);
 	static op_cnt_t operation_count(std::vector<math_vertex>&);
 	static std::vector<math_vertex> new_inputs(int cnt);
-	static std::string execute_all(std::vector<math_vertex>& vertices);
+	static std::string execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices);
 	static void optimize(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A, const math_vertex& B);
@@ -229,6 +238,18 @@ inline cmplx twiddle(int nk, int N) {
 	C.x = cos(theta);
 	C.y = sin(theta);
 	return C;
+}
+
+inline bool is_arithmetic(operation_t op) {
+	switch (op) {
+	case ADD:
+	case SUB:
+	case NEG:
+	case MUL:
+		return true;
+	default:
+		return false;
+	}
 }
 
 #endif /* MATH_HPP_ */

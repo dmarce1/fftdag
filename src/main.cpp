@@ -6,33 +6,27 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 64;
+constexpr int Nmax = 128;
 
 int main(int argc, char **argv) {
-	int N = 8;
-	auto inputs = math_vertex::new_inputs(2 * N);
-	auto outputs = fft(inputs, N, 0);
-	std::vector<dag_vertex<math_vertex::properties>> vin, vout;
-	for (auto i : inputs) {
-		vin.push_back(i);
-	}
-	for (auto o : outputs) {
-		vout.push_back(o);
-	}
-	pebble_game<math_vertex::properties> game(vin, vout);
-	int score = game.search();
-	fprintf(stderr, "score = %i\n", score);
+	//srand(time(NULL));
+	//int N = 25;
+//	auto inputs = math_vertex::new_inputs(2 * N);
+//	auto outputs = fft(inputs, N, 0);
+//	math_pebble_game game;
+//	game(inputs, outputs);
+//	int score = game.search();
+//	fprintf(stderr, "score = %i\n", score);
 
-	abort();
+//	abort();
 
 	fprintf( stderr, "------------------------------COMPLEX-----------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(2 * N);
 		auto outputs = fft(inputs, N, 0);
 		auto cnt = math_vertex::operation_count(outputs);
-		inputs.clear();
 		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
-		auto code = math_vertex::execute_all(outputs);
+		auto code = math_vertex::execute_all(std::move(inputs), outputs);
 		std::string fname = "fft.complex." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		code = std::string("\n\nvoid fft_complex_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
@@ -44,9 +38,8 @@ int main(int argc, char **argv) {
 		auto inputs = math_vertex::new_inputs(2 * N);
 		auto outputs = fft(inputs, N, FFT_INV);
 		auto cnt = math_vertex::operation_count(outputs);
-		inputs.clear();
 		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
-		auto code = math_vertex::execute_all(outputs);
+		auto code = math_vertex::execute_all(std::move(inputs), outputs);
 		std::string fname = "fft.complex_inv." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		code = std::string("\n\nvoid fft_complex_inv_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
@@ -58,9 +51,8 @@ int main(int argc, char **argv) {
 		auto inputs = math_vertex::new_inputs(N);
 		auto outputs = fft(inputs, N, FFT_REAL);
 		auto cnt = math_vertex::operation_count(outputs);
-		inputs.clear();
 		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
-		auto code = math_vertex::execute_all(outputs);
+		auto code = math_vertex::execute_all(std::move(inputs), outputs);
 		std::string fname = "fft.real." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		code = std::string("\n\nvoid fft_real_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
@@ -72,9 +64,8 @@ int main(int argc, char **argv) {
 		auto inputs = math_vertex::new_inputs(N);
 		auto outputs = fft(inputs, N, FFT_REAL | FFT_INV);
 		auto cnt = math_vertex::operation_count(outputs);
-		inputs.clear();
 		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
-		auto code = math_vertex::execute_all(outputs);
+		auto code = math_vertex::execute_all(std::move(inputs), outputs);
 		std::string fname = "fft.real_inv." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		code = std::string("\n\nvoid fft_real_inv_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
@@ -86,9 +77,8 @@ int main(int argc, char **argv) {
 		auto inputs = math_vertex::new_inputs(N);
 		auto outputs = fft(inputs, 4 * N, FFT_DCT2);
 		auto cnt = math_vertex::operation_count(outputs);
-		inputs.clear();
 		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
-		auto code = math_vertex::execute_all(outputs);
+		auto code = math_vertex::execute_all(std::move(inputs), outputs);
 		std::string fname = "fft.dct2." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		code = std::string("\n\nvoid fft_dct2_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
@@ -101,9 +91,8 @@ int main(int argc, char **argv) {
 		auto inputs = math_vertex::new_inputs(N);
 		auto outputs = fft(inputs, 4 * N, FFT_DCT2 | FFT_INV);
 		auto cnt = math_vertex::operation_count(outputs);
-		inputs.clear();
 		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg);
-		auto code = math_vertex::execute_all(outputs);
+		auto code = math_vertex::execute_all(std::move(inputs), outputs);
 		std::string fname = "fft.dct2_inv." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		code = std::string("\n\nvoid fft_dct2_inv_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";

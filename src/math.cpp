@@ -4,18 +4,6 @@
 #include <algorithm>
 #include <queue>
 
-bool is_arithmetic(operation_t op) {
-	switch (op) {
-	case ADD:
-	case SUB:
-	case NEG:
-	case MUL:
-		return true;
-	default:
-		return false;
-	}
-}
-
 bool is_additive(operation_t op) {
 	switch (op) {
 	case ADD:
@@ -97,6 +85,7 @@ math_vertex::properties::properties() {
 	cse = false;
 	depth = 0;
 	group_id = -1;
+	goal = false;
 }
 
 bool math_vertex::valid() const {
@@ -383,28 +372,82 @@ int math_vertex::get_group_id() const {
 	return v.properties().group_id;
 }
 
-std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
+std::string math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs) {
 	std::string code;
 	int ncnt = 5;
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n].v.properties().out_num = n;
+		outputs[n].set_goal();
 	}
 	auto db = outputs[0].v.properties().names;
+
 	dag_vertex<properties>::executor exe;
+	std::vector<math_vertex::weak_ref> nodes;
 	std::vector<dag_vertex<properties>> dags;
 	for (auto o : outputs) {
 		dags.push_back(o.v);
 	}
 	dags = dag_vertex<properties>::sort(exe, dags);
-	std::vector<math_vertex::weak_ref> nodes;
 	std::set<math_vertex::weak_ref> done;
 	for (auto d : dags) {
 		nodes.push_back(math_vertex(d));
-		if (math_vertex(nodes.back()).get_op() == IN) {
-			done.insert(nodes.back());
-		}
 	}
 	dags.clear();
+
+	/*std::queue<math_vertex> Q;
+	 for (auto i : inputs) {
+	 Q.push(i);
+	 }
+	 std::unordered_map<int, int> degree;
+	 std::unordered_map<int, std::vector<math_vertex>> output_map;
+	 for (auto n : nodes) {
+	 auto node = math_vertex(n);
+	 auto id = node.v.get_unique_id();
+	 degree[id] = node.get_edge_in_count();
+	 for (int j = 0; j < degree[id]; j++) {
+	 output_map[node.get_edge_in(j).get_unique_id()].push_back(node);
+	 }
+	 }
+	 nodes.resize(0);*/
+	std::stack<math_vertex> S;
+	std::unordered_set<int> visited;
+	std::map<int, math_vertex> goals;
+	for (auto n : nodes) {
+		auto node = math_vertex(n);
+		if (node.v.properties().goal) {
+			auto id = node.get_unique_id();
+			goals[id] = node;
+			visited.insert(id);
+		}
+	}
+	auto i = goals.end();
+	do {
+		i--;
+		S.push(i->second);
+	} while (i != goals.begin());
+
+	nodes.resize(0);
+	goals.clear();
+	while (S.size()) {
+		auto V = S.top();
+		bool flag = true;
+		for (int i = 0; i < V.get_edge_in_count(); i++) {
+			auto U = V.get_edge_in(i);
+			auto id = U.v.get_unique_id();
+			if (visited.find(id) == visited.end()) {
+				flag = false;
+				S.push(U);
+				visited.insert(id);
+			}
+		}
+		if (flag) {
+			nodes.push_back(V);
+			S.pop();
+		}
+	}
+
+	inputs.clear();
+
 	int index = 0;
 	for (auto n : nodes) {
 		auto node = math_vertex(n);
@@ -420,83 +463,19 @@ std::string math_vertex::execute_all(std::vector<math_vertex>& outputs) {
 			done.insert(node);
 		}
 	}
-	std::vector<std::string> last_names;
-	int last_group = -1;
-	while (42) {
-		std::vector<math_vertex> candidates;
-		for (int i = 0; i < nodes.size(); i++) {
-			if (done.find(nodes[i]) != done.end()) {
-				continue;
-			}
-			auto node = math_vertex(nodes[i]);
-			if (done.find(node) == done.end()) {
-				bool flag = false;
-				for (int j = 0; j < node.get_edge_in_count(); j++) {
-					if (done.find(node.get_edge_in(j)) == done.end()) {
-						flag = true;
-						break;
-					}
-				}
-				if (!flag) {
-					candidates.push_back(nodes[i]);
-				}
-			}
-		}
-		if (!candidates.size()) {
-			break;
-		}
-		int best_score = -100000000;
-		int best_index;
-		for (int i = 0; i < candidates.size(); i++) {
-			int score = 10000;
-			auto c = candidates[i];
-			int n = c.get_edge_in_count();
-			for (int j = 0; j < n; j++) {
-				auto edge = c.get_edge_in(j);
-				if (edge.v.use_count() <= 2) {
-					score += 1000;
-				} else if (edge.v.use_count() <= 3) {
-					score += 500;
-				}
-			}
-			score -= 100 * c.v.use_count();
-			score -= c.v.properties().depth;
-			int d = std::numeric_limits<int>::max();
-			for (int k = 0; k < c.get_edge_in_count(); k++) {
-				auto ei = c.get_edge_in(k);
-				for (int j = 0; j < last_names.size(); j++) {
-					d = std::min(d, distance(*ei.v.properties().name, last_names[j]));
-				}
-			}
-			d = 64 * std::min(d, 64);
-			score -= d;
-			if (score > best_score) {
-				best_score = score;
-				best_index = i;
-			}
-		}
-
-		auto v = candidates[best_index];
-		int n = v.get_edge_in_count();
-		for (int j = 0; j < n; j++) {
+	for (auto n : nodes) {
+		auto v = math_vertex(n);
+		int ncnt = v.get_edge_in_count();
+		for (int j = 0; j < ncnt; j++) {
 			auto edge = v.get_edge_in(j);
 			if (edge.v.use_count() <= 2 && !edge.is_constant()) {
 				v.v.properties().name = edge.v.properties().name;
 				break;
 			}
 		}
-		//	fprintf(stderr, "%i\n", v.get_group_id());
 		std::vector<math_vertex> in;
 		for (int k = 0; k < v.get_edge_in_count(); k++) {
 			in.push_back(v.get_edge_in(k));
-			last_names.push_back(*v.get_edge_in(k).v.properties().name);
-		}
-		//	last_group = v.get_group_id();
-		while (last_names.size() > 4) {
-			for (int j = 1; j < last_names.size(); j++) {
-				last_names[j - 1] = std::move(last_names[j]);
-			}
-			last_names.pop_back();
 		}
 		code += v.v.properties().print_code(in);
 		v.v.free_edges();

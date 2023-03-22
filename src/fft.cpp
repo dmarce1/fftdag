@@ -163,6 +163,10 @@ std::vector<cmplx> fft(std::vector<cmplx>& xin, int N, int opts) {
 		v.x.set_group_id(group);
 		v.y.set_group_id(group);
 	}
+	for (auto x : xout) {
+		x.x.set_goal();
+		x.y.set_goal();
+	}
 	return std::move(xout);
 }
 
@@ -294,6 +298,12 @@ std::vector<cmplx> fft_singleton(std::vector<cmplx> xin, int N, int opts) {
 		tp[j] = xin[j] + xin[N - j];
 		tm[j] = xin[j] - xin[N - j];
 	}
+	for (int j = 1; j <= M; j++) {
+//		tp[j].x.set_goal();
+//		tm[j].x.set_goal();
+//		tp[j].y.set_goal();
+//		tm[j].y.set_goal();
+	}
 	for (int i = 1; i <= M; i++) {
 		am[i] = 0.0;
 		bm[i] = 0.0;
@@ -368,6 +378,12 @@ std::vector<cmplx> fft_singleton(std::vector<cmplx> xin, int N, int opts) {
 			ap[i] += xin[0].x;
 			bp[i] += xin[0].y;
 		}
+	}
+	for (int j = 1; j <= M; j++) {
+	//	ap[j].set_goal();
+	//	am[j].set_goal();
+	//	bp[j].set_goal();
+	//	bm[j].set_goal();
 	}
 	for (int i = 1; i <= M; i++) {
 		xout[i].x = ap[i] - am[i];
