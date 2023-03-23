@@ -372,7 +372,8 @@ int math_vertex::get_group_id() const {
 	return v.properties().group_id;
 }
 
-std::string math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs) {
+std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs) {
+	std::pair<std::string, int> rc;
 	std::string code;
 	int ncnt = 5;
 	for (int n = 0; n < outputs.size(); n++) {
@@ -484,7 +485,14 @@ std::string math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vec
 
 	auto decls = db->get_declarations();
 	code = decls + code;
-	return std::move(code);
+	rc.first = code;
+	rc.second = 0;
+	for (int i = 0; i < decls.size(); i++) {
+		if (decls[i] == '\n') {
+			rc.second++;
+		}
+	}
+	return std::move(rc);
 }
 
 math_vertex::math_vertex(const dag_vertex<properties>& v0) {

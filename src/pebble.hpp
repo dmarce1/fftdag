@@ -11,100 +11,24 @@
 #include <stack>
 #include <unordered_set>
 #include <vector>
+#include "network.hpp"
 
 class pebble_game {
 	struct pebbles_type {
 		std::vector<bool> pebbled;
 		std::unordered_set<int> pebbles;
-		size_t key1;
-		size_t key2;
-		bool operator==(const pebbles_type& other) const {
-			return (key1 == other.key1) && (key2 == other.key2);
-		}
 	};
-	struct mem_entry_key {
-		size_t operator()(const pebbles_type& entry) const {
-			return entry.key1 * entry.key2;
-		}
-	};
+
 	int N;
 	std::vector<std::vector<int>> input_map;
 	std::vector<std::vector<int>> output_map;
-	std::vector<bool> exists;
 	std::vector<int> stack;
-	std::vector<int> keys1;
-	std::vector<int> keys2;
 	std::unordered_set<int> inputs;
 	std::unordered_set<int> outputs;
 	std::vector<bool> retired;
-	std::vector<int> distance;
-	std::unordered_map<pebbles_type, int, mem_entry_key> prev_boards;
-	int answer;
+	std::vector<bool> exists;
 	pebbles_type board;
-	std::unordered_map<pebbles_type, std::pair<int, int>, mem_entry_key> memory;
 public:
-	std::vector<int> generate_moves() {
-		std::vector<int> moves;
-		std::vector<int> priority;
-		static int max_moves = 0;
-		moves.reserve(max_moves);
-		for (auto pebble : board.pebbles) {
-			bool flag = true;
-			bool interior = false;
-			for (auto o : output_map[pebble]) {
-				interior = true;
-				if (!board.pebbled[o]) {
-					flag = false;
-				}
-			}
-			if (flag && interior) {
-				moves.push_back(pebble);
-				break;
-			}
-		}
-		if (!moves.size()) {
-			//		priority.reserve(max_moves);
-			std::unordered_set<int> used;
-			for (auto pebble : board.pebbles) {
-				for (auto o : output_map[pebble]) {
-					if (used.find(o) == used.end() && !retired[o]) {
-						used.insert(o);
-						if (!board.pebbled[o]) {
-							bool flag = true;
-							bool prior = false;
-							for (auto i : input_map[o]) {
-								if (!board.pebbled[i]) {
-									flag = false;
-									break;
-								}
-								//	int cnt = 0;
-								//	for (auto o : output_map[i]) {
-								//		if (!board.pebbled[o]) {
-								//				cnt++;
-								//				}
-								//				}
-								//					if (cnt == 1) {
-								//							prior = true;
-								//					}
-							}
-							if (flag) {
-								//	if (prior) {
-								//		priority.push_back(o);
-								//	} else {
-								moves.push_back(o);
-								//	}
-							}
-						}
-					}
-				}
-			}
-		}
-//		priority.insert(priority.end(), moves.begin(), moves.end());
-//		moves = std::move(priority);
-		max_moves = std::max(max_moves, (int) moves.size());
-		return std::move(moves);
-	}
-
 	void swap_pebble(int sq) {
 		if (board.pebbled[sq]) {
 			board.pebbled[sq] = false;
@@ -113,10 +37,9 @@ public:
 			board.pebbled[sq] = true;
 			board.pebbles.insert(sq);
 		}
-		board.key1 ^= keys1[sq];
-		board.key2 ^= keys2[sq];
 	}
 	bool make_move(int mv) {
+		assert(legal_move(mv));
 		if (!board.pebbled[mv]) {
 			retired[mv] = true;
 		}
@@ -139,8 +62,6 @@ public:
 				make_move(i);
 			}
 		}
-		distance.resize(N, 0);
-		std::unordered_set<int> touched;
 		for (int i = 0; i < N; i++) {
 			if (output_map[i].size() == 0 && exists[i]) {
 				outputs.insert(i);
@@ -151,73 +72,44 @@ public:
 	bool complete() {
 		int cnt = 0;
 		for (auto oi : outputs) {
-			if (!board.pebbled[oi]) {
+			if (!board.pebbled[oi] && exists[oi]) {
 				return false;
 			}
 		}
 		return true;
 	}
-	int search(int depth, int lev, int alpha = std::numeric_limits<int>::min(), int beta = std::numeric_limits<int>::max()) {
-		beta = std::min(beta, get_score());
-		if (alpha >= beta) {
-			return alpha;
+	int completeness() {
+		int cnt = 0;
+		for (auto oi : outputs) {
+			if (board.pebbled[oi] && exists[oi]) {
+				cnt++;
+			}
 		}
-		if (depth == 0) {
-			return get_score();
-		}
-		int upper_bound = std::numeric_limits<int>::max();
-		int lower_bound = std::numeric_limits<int>::min();
-		if (memory.find(board) != memory.end()) {
-			auto& entry = memory[board];
-			upper_bound = entry.second;
-			lower_bound = entry.first;
-		} else {
-			auto& entry = memory[board];
-			entry.second = std::numeric_limits<int>::max();
-			entry.first = std::numeric_limits<int>::min();
-		}
-		if (upper_bound <= alpha) {
-			return upper_bound;
-		} else {
-			beta = std::min(beta, upper_bound);
-		}
-		if (lower_bound >= beta) {
-			return beta;
-		} else {
-			alpha = std::max(alpha, lower_bound);
-		}
-		auto moves = generate_moves();
-		if (moves.size()) {
-			for (auto mv : moves) {
-				make_move(mv);
-				int this_score = search(depth - 1, lev + 1, alpha, beta);
-				undo_move();
-				if (this_score > alpha) {
-					alpha = this_score;
-					if (lev == 0) {
-						answer = mv;
-					}
-				}
-				if (alpha >= beta) {
-					alpha = beta;
+		return cnt;
+	}
+	bool legal_move(int sq) {
+		if (board.pebbled[sq]) {
+			bool f = output_map[sq].size();
+			for (int i : output_map[sq]) {
+				if (!board.pebbled[i]) {
+					f = false;
 					break;
 				}
 			}
-			auto& entry = memory[board];
-			if (alpha >= beta) {
-				entry.first = std::max(entry.first, alpha);
-			} else {
-				entry.second = std::min(entry.second, beta);
-			}
-			return alpha;
+			return f;
 		} else {
-			return get_score();
-		}
-	}
-	void clear_memory() {
-		//	memory.clear();
-		for (auto i = memory.begin(); i != memory.end(); i++) {
-			i->second.first = std::numeric_limits<int>::min();
+			if (retired[sq]) {
+				return false;
+			} else {
+				bool f = true;
+				for (int i : input_map[sq]) {
+					if (!board.pebbled[i]) {
+						f = false;
+						break;
+					}
+				}
+				return f;
+			}
 		}
 	}
 	void add_edge(int from, int to) {
@@ -229,55 +121,20 @@ public:
 			board.pebbled.resize(N, false);
 			retired.resize(N, false);
 			exists.resize(N, false);
-			int M = keys1.size();
-			keys1.resize(N);
-			for (int i = M; i < N; i++) {
-				keys1[i] = rand() * rand();
-			}
-			keys2.resize(N);
-			for (int i = M; i < N; i++) {
-				keys2[i] = rand() * rand();
-			}
 		}
 		exists[from] = exists[to] = true;
 		input_map[to].push_back(from);
 		output_map[from].push_back(to);
 	}
 	pebble_game() {
-		board.key1 = 0;
-		board.key2 = 0;
 		N = 0;
 	}
 	int get_score() const {
-		int score = -board.pebbles.size() * 100;
-		int minpeb = std::numeric_limits<int>::max();
-		int maxpeb = std::numeric_limits<int>::min();
-		for (auto pebble : board.pebbles) {
-			minpeb = std::min(minpeb, pebble);
-			maxpeb = std::max(maxpeb, pebble);
-			int pcnt = 0;
-			int ocnt = 0;
-			for (auto o : output_map[pebble]) {
-				if (board.pebbled[o]) {
-					pcnt++;
-				} else {
-					ocnt++;
-				}
-			}
-			if (pcnt != 0 && ocnt != 0) {
-				score -= (21 + (ocnt - 1) * 11);
-			} else if (pcnt == 0 && ocnt == 0) {
-				score -= 3;
-			}
-		}
-		score -= (maxpeb - minpeb) * 50 / output_map.size();
+		int score = board.pebbles.size();
 		return score;
 	}
-	int pebble_count() const {
-		return board.pebbles.size();
-	}
-	int get_best_move() const {
-		return answer;
+	bool pebbled(int i) {
+		return board.pebbled[i];
 	}
 }
 ;
@@ -312,19 +169,68 @@ public:
 		}
 		prepare();
 		int mscore = std::numeric_limits<int>::max();
-		int score;
-		int pmax = 0;
-		while (!complete()) {
-			int last_score;
-			int depth;
-			int cnt = 0;
-			score = search(10, 0, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
-			mscore = std::min(mscore, score);
-			int mv = get_best_move();
-			make_move(mv);
-			pmax = std::max(pmax, pebble_count());
-			printf("%i %i %i pcmax: %i pc: %i d: %i\n", mv, score, mscore, pmax, pebble_count(), depth);
-			clear_memory();
+		int N = vertices.size();
+
+		ann brain(N, 4);
+
+		int step = 0;
+		int best_score = std::numeric_limits<int>::max();
+		while (1) {
+			int last_mv = -1;
+			int score = 0;
+			auto last_brain = brain;
+			brain.mutate();
+			int mvcnt = 0;
+			while (!complete()) {
+				if (score > best_score) {
+					break;
+				}
+				for (int i = 0; i < N; i++) {
+					if (pebbled(i) && legal_move(i)) {
+						make_move(i);
+						mvcnt++;
+					}
+				}
+				std::vector<bool> input(N);
+				for (int n = 0; n < N; n++) {
+					if (pebbled(n)) {
+						input[n] = true;
+					} else {
+						input[n] = !legal_move(n);
+					}
+				}
+				auto output = brain.evaluate(input);
+				int besti = -1;
+				double bestv = -std::numeric_limits<double>::max();
+				for (int i = 0; i < N; i++) {
+					if (legal_move(i) && i != last_mv) {
+						if (output[i] > bestv) {
+							bestv = output[i];
+							besti = i;
+						}
+					}
+				}
+				int mv = besti;
+				make_move(mv);
+				score = std::max(score, get_score());
+				last_mv = mv;
+				mvcnt++;
+			}
+			while (mvcnt) {
+				undo_move();
+				mvcnt--;
+			}
+			step++;
+			bool code = score < best_score;
+			bool code1 = score < best_score;
+			if (!code) {
+				brain = last_brain;
+			} else {
+				best_score = score;
+			}
+			if (code1) {
+				fprintf( stderr, "%i. %i %i %c\n", step, score, best_score, code ? '*' : ' ');
+			}
 		}
 		return mscore;
 	}

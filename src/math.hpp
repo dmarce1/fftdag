@@ -134,7 +134,7 @@ public:
 	static math_vertex new_input(std::shared_ptr<name_server> db, std::string&& name);
 	static op_cnt_t operation_count(std::vector<math_vertex>&);
 	static std::vector<math_vertex> new_inputs(int cnt);
-	static std::string execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices);
+	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices);
 	static void optimize(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A, const math_vertex& B);
