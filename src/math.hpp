@@ -108,11 +108,21 @@ public:
 	bool valid() const;
 	math_vertex(const math_vertex&v) = default;
 	math_vertex(math_vertex&& v) = default;
-	math_vertex& operator=(const math_vertex&v) = default;
-	math_vertex& operator=(math_vertex&& v) = default;
 	math_vertex(const dag_vertex<properties>& v);
 	math_vertex(dag_vertex<properties> && v);
 	math_vertex(double constant);
+	math_vertex& operator=(const math_vertex& other) {
+		if( get_unique_id() != other.get_unique_id()) {
+				v = other.v;
+		}
+		return *this;
+	}
+	math_vertex& operator=( math_vertex&& other) {
+		if( get_unique_id() != other.get_unique_id()) {
+			v = std::move(other.v);
+		}
+		return *this;
+	}
 	math_vertex& operator=(double constant);
 //	math_vertex get_edge_out(int i) const;
 //	int get_edge_out_count() const;
@@ -134,7 +144,7 @@ public:
 	static math_vertex new_input(std::shared_ptr<name_server> db, std::string&& name);
 	static op_cnt_t operation_count(std::vector<math_vertex>&);
 	static std::vector<math_vertex> new_inputs(int cnt);
-	static std::string execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices);
+	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices);
 	static void optimize(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A, const math_vertex& B);
@@ -164,6 +174,7 @@ struct cmplx {
 	math_vertex x;
 	math_vertex y;
 	cmplx() = default;
+	cmplx(const cmplx &) = default;
 	cmplx operator+(cmplx other) const {
 		cmplx C;
 		C.x = x + other.x;

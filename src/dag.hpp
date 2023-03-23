@@ -205,7 +205,24 @@ public:
 		execute(touched);
 	}
 	int get_unique_id() const {
-		return state_ptr->id;
+		if (state_ptr) {
+			return state_ptr->id;
+		} else {
+			return -1;
+		}
+	}
+	dag_vertex(const dag_vertex& other) = default;
+	dag_vertex& operator=(const dag_vertex& other) {
+		if (get_unique_id() != other.get_unique_id()) {
+			state_ptr = other.state_ptr;
+		}
+		return *this;
+	}
+	dag_vertex& operator=(dag_vertex&& other) {
+		if (get_unique_id() != other.get_unique_id()) {
+			state_ptr = std::move(other.state_ptr);
+		}
+		return *this;
 	}
 	bool operator==(const dag_vertex& v) const {
 		if (!state_ptr && !v.state_ptr) {

@@ -9,11 +9,11 @@ std::vector<cmplx> fft_radix4(std::vector<cmplx> xin, int N, int opts = 0);
 std::vector<cmplx> fft_singleton(std::vector<cmplx> xin, int N, int opts = 0);
 std::vector<cmplx> fft_prime_factor(int N1, int N2, std::vector<cmplx> xin, int opts = 0);
 std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int opts = 0);
-std::vector<cmplx> fft(std::vector<cmplx>& xin, int N, int opts = 0);
+std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts = 0);
 
 static int next_group = 1;
 
-std::vector<math_vertex> fft(std::vector<math_vertex>& xin, int N, int opts) {
+std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 	int group = next_group++;
 	for (auto v : xin) {
 		v.set_group_id(group);
@@ -113,7 +113,7 @@ std::vector<math_vertex> fft(std::vector<math_vertex>& xin, int N, int opts) {
 	return std::move(xout);
 }
 
-std::vector<cmplx> fft(std::vector<cmplx>& xin, int N, int opts) {
+std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 	if (N == 1) {
 		return xin;
 	}
@@ -299,10 +299,10 @@ std::vector<cmplx> fft_singleton(std::vector<cmplx> xin, int N, int opts) {
 		tm[j] = xin[j] - xin[N - j];
 	}
 	for (int j = 1; j <= M; j++) {
-//		tp[j].x.set_goal();
-//		tm[j].x.set_goal();
-//		tp[j].y.set_goal();
-//		tm[j].y.set_goal();
+		tp[j].x.set_goal();
+		tm[j].x.set_goal();
+		tp[j].y.set_goal();
+		tm[j].y.set_goal();
 	}
 	for (int i = 1; i <= M; i++) {
 		am[i] = 0.0;
@@ -367,23 +367,27 @@ std::vector<cmplx> fft_singleton(std::vector<cmplx> xin, int N, int opts) {
 	}
 	xout[0] += xin[0];
 	for (int i = 1; i <= M; i++) {
-		for (int j = 1; j <= M; j++) {
-			auto si = sin(2.0 * M_PI * j * i / N);
-			am[i] -= tm[j].y * si;
-			bm[i] -= tm[j].x * si;
-		}
-	}
-	for (int i = 1; i <= M; i++) {
 		if (first[i]) {
 			ap[i] += xin[0].x;
 			bp[i] += xin[0].y;
 		}
 	}
 	for (int j = 1; j <= M; j++) {
-	//	ap[j].set_goal();
-	//	am[j].set_goal();
-	//	bp[j].set_goal();
-	//	bm[j].set_goal();
+		ap[j].set_goal();
+		bp[j].set_goal();
+		xout[0].x.set_goal();
+		xout[0].y.set_goal();
+	}
+	for (int i = 1; i <= M; i++) {
+		for (int j = 1; j <= M; j++) {
+			auto si = sin(2.0 * M_PI * j * i / N);
+			am[i] -= tm[j].y * si;
+			bm[i] -= tm[j].x * si;
+		}
+	}
+	for (int j = 1; j <= M; j++) {
+		am[j].set_goal();
+		bm[j].set_goal();
 	}
 	for (int i = 1; i <= M; i++) {
 		xout[i].x = ap[i] - am[i];
@@ -438,20 +442,25 @@ std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int op
 	const auto& gq = raders_gq(N);
 	const auto& ginvq = raders_ginvq(N);
 	std::vector<cmplx> a(M, cmplx( { 0.0, 0.0 }));
+	std::vector<cmplx> c(M, cmplx( { 0.0, 0.0 }));
 	for (int q = 0; q < N - 1; q++) {
 		a[q] = xin[gq[q]];
-	}
-	a = fft(a, M, 0);
-	for (int q = 0; q < M; q++) {
-		a[q] = (a[q] * cmplx(b[q])).conj();
-	}
-	a = fft(a, M, 0);
-	for (int q = 0; q < M; q++) {
-		a[q] = a[q].conj();
 	}
 	xout[0] = cmplx( { 0.0, 0.0 });
 	for (int n = 0; n < N; n++) {
 		xout[0] += xin[n];
+	}
+	a = fft(a, M);
+	for (int q = 0; q < M; q++) {
+		c[q] = a[q] * cmplx(b[q]);
+	}
+	a = c;
+	for (int q = 0; q < M; q++) {
+		std::swap(a[q].x, a[q].y);
+	}
+	a = fft(a, M);
+	for (int q = 0; q < M; q++) {
+		std::swap(a[q].x, a[q].y);
 	}
 	for (int p = 0; p < N - 1; p++) {
 		xout[ginvq[p]] = xin[0] + a[p];
