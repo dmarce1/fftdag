@@ -171,20 +171,66 @@ bool are_coprime(int a, int b) {
 	return true;
 }
 
+std::vector<int> fft_input_signature(std::vector<cmplx> xin) {
+	return std::vector<int>(2*xin.size(), 0);
+	std::vector<int> sig;
+	std::vector<math_vertex> X;
+	for (auto x : xin) {
+		X.push_back(x.x);
+		X.push_back(x.y);
+	}
+	std::map<int, int> imap;
+	int index = 1;
+	for (int i = 0; i < X.size(); i++) {
+		if (X[i].is_zero()) {
+			sig.push_back(0);
+		} else {
+			bool neg;
+			int xid;
+			if (X[i].is_neg()) {
+				neg = true;
+				xid = X[i].get_neg().get_unique_id();
+			} else {
+				neg = false;
+				xid = X[i].get_unique_id();
+			}
+			if (imap.find(xid) == imap.end()) {
+				imap[xid] = index++;
+			}
+			if (neg) {
+				sig.push_back(-imap[xid]);
+			} else {
+				sig.push_back(imap[xid]);
+			}
+		}
+	}
+	return sig;
+}
+
 struct best_x {
 	int N;
 	int opts;
+	std::vector<int> sig;
 	bool operator==(const best_x& other) const {
-		return N == other.N && opts == other.opts;
+		return N == other.N && opts == other.opts && sig == other.sig;
 	}
 	bool operator<(const best_x& other) const {
-		if (opts < other.opts) {
+		if( N < other.N) {
 			return true;
-		} else if (opts > other.opts) {
+		} else if( N > other.N) {
+			return false;
+		} else if( opts < other.opts) {
+			return true;
+		} else if( opts > other.opts) {
 			return false;
 		} else {
-			return N < other.N;
+			for( int n = 0; n < N; n++) {
+				if( sig[n] < other.sig[n]) {
+					return true;
+				}
+			}
 		}
+		return false;
 	}
 };
 
@@ -253,6 +299,7 @@ void print_fft_bests() {
 	}
 }
 
+
 std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 	if (N == 1) {
 		return xin;
@@ -276,6 +323,7 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 	}
 	best_x X;
 	X.N = N;
+	X.sig = fft_input_signature(xin);
 	X.opts = opts;
 	if (best.find(X) == best.end()) {
 		int huge = std::numeric_limits<int>::max();
@@ -362,10 +410,7 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 	default:
 		assert(false);
 	}
-	if (R % 2 == 0) {
-		//	best_radix.erase(R);
-		//	best_method.erase(R);
-	}
+//	best.erase(X);
 	group = next_group++;
 	for (auto v : xout) {
 		v.x.set_group_id(group);

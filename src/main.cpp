@@ -6,7 +6,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 128;
+constexpr int Nmax = 16;
 
 int main(int argc, char **argv) {
 	math_vertex::print_cse();
