@@ -54,7 +54,7 @@ std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts) {
 		return std::move(xin);
 	}
 	std::vector<cmplx> xout(N);
-	auto u0 = fft_modsplit(split_even(xin, N), N / 2);
+	auto u0 = fft_modsplit(split_even(xin, N), N / 2, opts);
 	auto zp = fft_modsplitS(split_podd(xin, N), N / 4);
 	auto zn = fft_modsplitS(split_nodd(xin, N), N / 4);
 	for (int k = 0; k < N / 4; k++) {

@@ -6,7 +6,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 32;
+constexpr int Nmax = 128;
 
 int main(int argc, char **argv) {
 	math_vertex::print_cse();
@@ -378,5 +378,6 @@ int main(int argc, char **argv) {
 	fprintf(fp, "ffttest: $(OBJ)\n");
 	fprintf(fp, "\t$(CC) -o $@ $^ $(CFLAGS) -lfftw3\n");
 	fclose(fp);
+	print_fft_bests();
 	return 0;
 }
