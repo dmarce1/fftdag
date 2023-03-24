@@ -228,7 +228,6 @@ math_vertex::math_vertex(double constant) {
 	} else {
 		*this = -math_vertex(-constant);
 	}
-	check_cse();
 }
 
 math_vertex& math_vertex::operator=(double constant) {
@@ -415,9 +414,12 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	std::map<int, math_vertex> goals;
 	for (auto n : nodes) {
 		auto node = math_vertex(n);
+		auto id = node.get_unique_id();
 		if (node.v.properties().goal) {
-			auto id = node.get_unique_id();
 			goals[id] = node;
+			visited.insert(id);
+		}
+		if (node.get_op() == IN) {
 			visited.insert(id);
 		}
 	}
@@ -466,6 +468,9 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	}
 	for (auto n : nodes) {
 		auto v = math_vertex(n);
+		if (done.find(v) != done.end()) {
+			continue;
+		}
 		int ncnt = v.get_edge_in_count();
 		for (int j = 0; j < ncnt; j++) {
 			auto edge = v.get_edge_in(j);
@@ -527,6 +532,9 @@ bool math_vertex::check_cse() {
 	assert(valid());
 	value_number vn;
 	const auto op = v.properties().op;
+	if (op == CON || op == IN) {
+		return false;
+	}
 	vn.op = op;
 	auto add_set = associative_adds();
 	if (is_additive(op)) {
@@ -558,9 +566,6 @@ bool math_vertex::check_cse() {
 		}
 	}
 	assert(!(neg && pos));
-	if (vacate.v != math_vertex().v) {
-		vacate.v.properties().cse = false;
-	}
 	if (!pos && !neg) {
 		value_number* ptr = new value_number(vn);
 		v.properties().cse = true;
@@ -571,6 +576,9 @@ bool math_vertex::check_cse() {
 			}
 			delete vptr;
 		});
+		auto op = get_op();
+		assert((int ) op < 6);
+		assert((int ) op >= 0);
 		cse[vn] = *this;
 		return false;
 	} else {
@@ -637,9 +645,6 @@ bool math_vertex::is_constant() const {
 math_vertex math_vertex::optimize() {
 	assert(valid());
 	const auto op = v.properties().op;
-	//for (int ei = 0; ei < edge_count(op); ei++) {
-	//	replace_edge(get_edge_in(ei), get_edge_in(ei).optimize());
-//	}
 	math_vertex c = *this;
 	math_vertex a;
 	math_vertex b;
@@ -837,6 +842,15 @@ math_vertex::math_vertex() {
 	}
 }
 
+void math_vertex::print_cse() {
+	for (auto i = cse.begin(); i != cse.end(); i++) {
+		math_vertex v = i->second.ptr;
+		assert(v.valid());
+		printf("-----------------------\n");
+		printf("%i %i %i\n", i->second.ptr.use_count(), i->first.op, (int) v.get_op());
+	}
+}
+
 math_vertex::cse_entry::cse_entry() {
 	vacate = false;
 }
@@ -865,12 +879,11 @@ std::unordered_map<math_vertex::value_number, math_vertex::cse_entry, math_verte
 std::vector<math_vertex> math_vertex::essential_constants;
 std::map<double, math_vertex> math_vertex::consts;
 bool math_vertex::first_init = false;
-bool math_vertex::vacate_all = false;
 
-void math_vertex::reset() {
-	cse.clear();
-	essential_constants.clear();
-	consts.clear();
-	first_init = vacate_all = false;
-	dag_vertex<properties>::reset();
-}
+/*void math_vertex::reset() {
+ cse.clear();
+ essential_constants.clear();
+ consts.clear();
+ first_init = vacate_all = false;
+ dag_vertex<properties>::reset();
+ }*/

@@ -17,7 +17,6 @@ double scale_factor(int N, int k) {
 	}
 }
 
-static cmplx I( { 0.0, 1.0 });
 
 static std::vector<cmplx> split_even(const std::vector<cmplx>& xin, int N) {
 	std::vector<cmplx> xout;
@@ -44,6 +43,7 @@ static std::vector<cmplx> split_nodd(const std::vector<cmplx>& xin, int N) {
 }
 
 std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts) {
+	cmplx I( { 0.0, 1.0 });
 	if (N == 0) {
 	} else if (N == 1) {
 		return std::move(xin);
@@ -78,6 +78,7 @@ std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts) {
 }
 
 std::vector<cmplx> fft_modsplitS(std::vector<cmplx> xin, int N) {
+	cmplx I( { 0.0, 1.0 });
 	if (N == 0) {
 	} else if (N == 1) {
 		return std::move(xin);
@@ -112,6 +113,7 @@ return std::move(xout);
 }
 
 std::vector<cmplx> fft_modsplitS2(std::vector<cmplx> xin, int N) {
+	cmplx I( { 0.0, 1.0 });
 	if (N == 0) {
 	} else if (N == 1) {
 		return std::move(xin);
@@ -146,6 +148,7 @@ std::vector<cmplx> fft_modsplitS2(std::vector<cmplx> xin, int N) {
 }
 
 std::vector<cmplx> fft_modsplitS4(std::vector<cmplx> xin, int N) {
+	cmplx I( { 0.0, 1.0 });
 	if (N == 0) {
 	} else if (N == 1) {
 		return std::move(xin);

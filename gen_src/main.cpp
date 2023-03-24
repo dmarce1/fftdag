@@ -77,7 +77,29 @@ void fftw_inv(std::vector<std::complex<double>>& x) {
 
 }
 
-void fftw_dct(std::vector<double>& x) {
+void fftw_dct1(std::vector<double>& x) {
+	const int N = x.size();
+	static std::unordered_map<int, fftw_plan> plans;
+	static std::unordered_map<int, double*> in;
+	static std::unordered_map<int, double*> out;
+	if (plans.find(N) == plans.end()) {
+		in[N] = (double*) malloc(sizeof(double) * N);
+		out[N] = (double*) malloc(sizeof(double) * N);
+		plans[N] = fftw_plan_r2r_1d(N, in[N], out[N], FFTW_REDFT00, FFTW_ESTIMATE);
+	}
+	auto* i = in[N];
+	auto* o = out[N];
+	for (int n = 0; n < N; n++) {
+		i[n] = x[n];
+	}
+	fftw_execute(plans[N]);
+	for (int n = 0; n < N; n++) {
+		x[n] = (o[n]);
+	}
+
+}
+
+void fftw_dct2(std::vector<double>& x) {
 	const int N = x.size();
 	static std::unordered_map<int, fftw_plan> plans;
 	static std::unordered_map<int, double*> in;
@@ -99,7 +121,7 @@ void fftw_dct(std::vector<double>& x) {
 
 }
 
-void fftw_dct_inv(std::vector<double>& x) {
+void fftw_dct3(std::vector<double>& x) {
 	const int N = x.size();
 	static std::unordered_map<int, fftw_plan> plans;
 	static std::unordered_map<int, double*> in;
@@ -108,6 +130,28 @@ void fftw_dct_inv(std::vector<double>& x) {
 		in[N] = (double*) malloc(sizeof(double) * N);
 		out[N] = (double*) malloc(sizeof(double) * N);
 		plans[N] = fftw_plan_r2r_1d(N, in[N], out[N], FFTW_REDFT01, FFTW_ESTIMATE);
+	}
+	auto* i = in[N];
+	auto* o = out[N];
+	for (int n = 0; n < N; n++) {
+		i[n] = x[n];
+	}
+	fftw_execute(plans[N]);
+	for (int n = 0; n < N; n++) {
+		x[n] = (o[n]);
+	}
+
+}
+
+void fftw_dct4(std::vector<double>& x) {
+	const int N = x.size();
+	static std::unordered_map<int, fftw_plan> plans;
+	static std::unordered_map<int, double*> in;
+	static std::unordered_map<int, double*> out;
+	if (plans.find(N) == plans.end()) {
+		in[N] = (double*) malloc(sizeof(double) * N);
+		out[N] = (double*) malloc(sizeof(double) * N);
+		plans[N] = fftw_plan_r2r_1d(N, in[N], out[N], FFTW_REDFT11, FFTW_ESTIMATE);
 	}
 	auto* i = in[N];
 	auto* o = out[N];
@@ -379,6 +423,45 @@ void test() {
 	}
 	tm3.reset();
 	tm4.reset();
+	printf("\nDCT-I\n");
+	for (int N = FFT_NMIN; N <= FFT_NMAX; N += 1) {
+		timer tm1, tm2;
+		double err;
+		double max;
+		for (int ti = 0; ti < 256; ti++) {
+			err = 0.0;
+			max = 0.0;
+			std::vector<double> X(N);
+			std::vector<double> Y;
+			for (int n = 0; n < N; n++) {
+				X[n] = rand1();
+			}
+			auto X0 = X;
+			Y = X;
+			tm1.start();
+			tm3.start();
+			fft_dct1((double*) X.data(), N);
+			tm1.stop();
+			tm3.stop();
+			tm2.start();
+			tm4.start();
+			fftw_dct1(Y);
+			tm2.stop();
+			tm4.stop();
+			for (int i = 0; i < X.size(); i++) {
+				Y[i] -= X[i];
+			}
+			for (int n = 0; n < X.size(); n++) {
+				err += std::abs(Y[n]) * std::abs(Y[n]);
+				max = std::max(max, std::abs(X0[n]));
+				//			printf("%i %e %e\n", n, X[n], Y[n]);
+			}
+			err = sqrt(err / N) / (max + 1e-100);
+		}
+		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
+	}
+	tm3.reset();
+	tm4.reset();
 	printf("\nDCT-II\n");
 	for (int N = FFT_NMIN; N <= FFT_NMAX; N += 1) {
 		timer tm1, tm2;
@@ -401,7 +484,7 @@ void test() {
 			tm3.stop();
 			tm2.start();
 			tm4.start();
-			fftw_dct(Y);
+			fftw_dct2(Y);
 			tm2.stop();
 			tm4.stop();
 			for (int i = 0; i < X.size(); i++) {
@@ -416,7 +499,9 @@ void test() {
 		}
 		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
 	}
-	printf("\nDCT-II-INVERSE\n");
+	tm3.reset();
+	tm4.reset();
+	printf("\nDCT-III\n");
 	for (int N = FFT_NMIN; N <= FFT_NMAX; N += 1) {
 		timer tm1, tm2;
 		double err;
@@ -433,12 +518,51 @@ void test() {
 			Y = X;
 			tm1.start();
 			tm3.start();
-			fft_dct2_inv((double*) X.data(), N);
+			fft_dct3((double*) X.data(), N);
 			tm1.stop();
 			tm3.stop();
 			tm2.start();
 			tm4.start();
-			fftw_dct_inv(Y);
+			fftw_dct3(Y);
+			tm2.stop();
+			tm4.stop();
+			for (int i = 0; i < X.size(); i++) {
+				Y[i] -= X[i];
+			}
+			for (int n = 0; n < X.size(); n++) {
+				err += std::abs(Y[n]) * std::abs(Y[n]);
+				max = std::max(max, std::abs(X0[n]));
+			//	printf("%i %e %e\n", n, X[n], Y[n]);
+			}
+			err = sqrt(err / N) / (max + 1e-100);
+		}
+		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
+	}
+	tm3.reset();
+	tm4.reset();
+	printf("\nDCT-IV\n");
+	for (int N = FFT_NMIN; N <= FFT_NMAX; N += 1) {
+		timer tm1, tm2;
+		double err;
+		double max;
+		for (int ti = 0; ti < 256; ti++) {
+			err = 0.0;
+			max = 0.0;
+			std::vector<double> X(N);
+			std::vector<double> Y;
+			for (int n = 0; n < N; n++) {
+				X[n] = rand1();
+			}
+			auto X0 = X;
+			Y = X;
+			tm1.start();
+			tm3.start();
+			fft_dct4((double*) X.data(), N);
+			tm1.stop();
+			tm3.stop();
+			tm2.start();
+			tm4.start();
+			fftw_dct4(Y);
 			tm2.stop();
 			tm4.stop();
 			for (int i = 0; i < X.size(); i++) {

@@ -98,6 +98,9 @@ public:
 		bool operator==(const weak_ref& other) const {
 			return id == other.id;
 		}
+		int use_count() const {
+			return ptr.use_count();
+		}
 		friend class dag_vertex;
 	};
 	dag_vertex(const weak_ref& ref) {

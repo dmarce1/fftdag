@@ -62,6 +62,9 @@ public:
 		weak_ref(const math_vertex& v);
 		bool operator<(const weak_ref&) const;
 		bool operator==(const weak_ref&) const;
+		int use_count() const {
+			return ptr.use_count();
+		}
 		friend class math_vertex;
 	};
 	struct value_key {
@@ -94,9 +97,10 @@ public:
 	}
 	~math_vertex();
 	void set_goal() {
-		if (get_op() != CON && get_op() != IN) {
-			v.properties().goal = true;
-		}
+		v.properties().goal = true;
+	}
+	static int cse_size() {
+		return cse.size();
 	}
 	bool is_neg() const;
 	math_vertex get_neg() const;
@@ -156,12 +160,12 @@ public:
 		cse_entry();
 		cse_entry& operator=(const math_vertex&);
 	};
+	static void print_cse();
 	static void reset();
 private:
 	dag_vertex<properties> v;
 	bool check_cse();
 	static bool first_init;
-	static bool vacate_all;
 	static std::map<double, math_vertex> consts;
 	static std::unordered_map<value_number, cse_entry, value_key> cse;
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);

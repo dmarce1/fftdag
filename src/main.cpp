@@ -6,20 +6,22 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 64;
+constexpr int Nmax = 32;
 
 int main(int argc, char **argv) {
+	math_vertex::print_cse();
 //	srand(time(NULL));
 //	int N = 29;
 //	auto inputs = math_vertex::new_inputs(2 * N);
 //	auto outputs = fft(inputs, N, 0);
-	math_pebble_game game;
+//	math_pebble_game game;
 //	game(inputs, outputs);
 //	int score = game.search();
 //	fprintf(stderr, "score = %i\n", score);
 
 //abort();
 	int cnt1 = 0;
+	int cnt2 = 0;
 	fprintf( stderr, "------------------------------COMPLEX-----------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(2 * N);
@@ -34,6 +36,7 @@ int main(int argc, char **argv) {
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;
+		cnt2 += cnt.total();
 	}
 	fprintf( stderr, "------------------------------COMPLEX INVERSE-----------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
@@ -49,6 +52,7 @@ int main(int argc, char **argv) {
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;
+		cnt2 += cnt.total();
 	}
 	fprintf( stderr, "------------------------------REAL--------------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
@@ -64,6 +68,7 @@ int main(int argc, char **argv) {
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;
+		cnt2 += cnt.total();
 	}
 	fprintf( stderr, "------------------------------REAL INVERSE-------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
@@ -79,6 +84,23 @@ int main(int argc, char **argv) {
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;
+		cnt2 += cnt.total();
+	}
+	fprintf( stderr, "------------------------------DCT-I--------------------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(N);
+		auto outputs = fft(inputs, 2 * (N - 1), FFT_DCT1);
+		auto cnt = math_vertex::operation_count(outputs);
+		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
+		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+		auto code = tmp.first;
+		std::string fname = "fft.dct1." + std::to_string(N) + ".cpp";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		code = std::string("\n\nvoid fft_dct1_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+		cnt1 += tmp.second;
+		cnt2 += cnt.total();
 	}
 	fprintf( stderr, "------------------------------DCT-II--------------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
@@ -94,24 +116,42 @@ int main(int argc, char **argv) {
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;
+		cnt2 += cnt.total();
 	}
 
-	fprintf( stderr, "------------------------------DCT-II INVERSE--------------------------\n");
+	fprintf( stderr, "------------------------------DCT-III--------------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(N);
-		auto outputs = fft(inputs, 4 * N, FFT_DCT2 | FFT_INV);
+		auto outputs = fft(inputs, 4 * N, FFT_DCT3);
 		auto cnt = math_vertex::operation_count(outputs);
 		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
 		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 		auto code = tmp.first;
-		std::string fname = "fft.dct2_inv." + std::to_string(N) + ".cpp";
+		std::string fname = "fft.dct3." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
-		code = std::string("\n\nvoid fft_dct2_inv_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		code = std::string("\n\nvoid fft_dct3_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;
+		cnt2 += cnt.total();
 	}
-	fprintf( stderr, "D: %i\n", cnt1);
+	fprintf( stderr, "------------------------------DCT-IV--------------------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(N);
+		auto outputs = fft(inputs, 8 * N, FFT_DCT4);
+		auto cnt = math_vertex::operation_count(outputs);
+		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
+		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+		auto code = tmp.first;
+		std::string fname = "fft.dct4." + std::to_string(N) + ".cpp";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		code = std::string("\n\nvoid fft_dct4_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+		cnt1 += tmp.second;
+		cnt2 += cnt.total();
+	}
+	fprintf( stderr, "O: %i D: %i\n", cnt2, cnt1);
 	system("cp ../../gen_src/main.cpp .\n");
 
 	FILE* fp = fopen("fft.hpp", "wt");
@@ -131,17 +171,25 @@ int main(int argc, char **argv) {
 		fprintf(fp, "void fft_real_inv_%i(double*);\n", N);
 	}
 	for (int N = Nmin; N <= Nmax; N++) {
+		fprintf(fp, "void fft_dct1_%i(double*);\n", N);
+	}
+	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void fft_dct2_%i(double*);\n", N);
 	}
 	for (int N = Nmin; N <= Nmax; N++) {
-		fprintf(fp, "void fft_dct2_inv_%i(double*);\n", N);
+		fprintf(fp, "void fft_dct3_%i(double*);\n", N);
+	}
+	for (int N = Nmin; N <= Nmax; N++) {
+		fprintf(fp, "void fft_dct4_%i(double*);\n", N);
 	}
 	fprintf(fp, "\n\nvoid fft_complex(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_complex_inv(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_real(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_real_inv(double*, int);\n");
+	fprintf(fp, "\n\nvoid fft_dct1(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_dct2(double*, int);\n");
-	fprintf(fp, "\n\nvoid fft_dct2_inv(double*, int);\n");
+	fprintf(fp, "\n\nvoid fft_dct3(double*, int);\n");
+	fprintf(fp, "\n\nvoid fft_dct4(double*, int);\n");
 	fprintf(fp, "\n\n");
 	fclose(fp);
 
@@ -208,6 +256,21 @@ int main(int argc, char **argv) {
 		}
 	}
 	fprintf(fp, "\n};\n\n");
+	fprintf(fp, "fft_type fft_dct1_pointer[FFT_NMAX + 1] = {");
+	for (int N = 0; N <= Nmax; N++) {
+		if (N % 8 == 0) {
+			fprintf(fp, "\n\t");
+		}
+		if (N < Nmin) {
+			fprintf(fp, "nullptr");
+		} else {
+			fprintf(fp, "&fft_dct1_%i", N);
+		}
+		if (N != Nmax) {
+			fprintf(fp, ", ");
+		}
+	}
+	fprintf(fp, "\n};\n\n");
 	fprintf(fp, "fft_type fft_dct2_pointer[FFT_NMAX + 1] = {");
 	for (int N = 0; N <= Nmax; N++) {
 		if (N % 8 == 0) {
@@ -223,7 +286,7 @@ int main(int argc, char **argv) {
 		}
 	}
 	fprintf(fp, "\n};\n\n");
-	fprintf(fp, "fft_type fft_dct2_inv_pointer[FFT_NMAX + 1] = {");
+	fprintf(fp, "fft_type fft_dct3_pointer[FFT_NMAX + 1] = {");
 	for (int N = 0; N <= Nmax; N++) {
 		if (N % 8 == 0) {
 			fprintf(fp, "\n\t");
@@ -231,7 +294,22 @@ int main(int argc, char **argv) {
 		if (N < Nmin) {
 			fprintf(fp, "nullptr");
 		} else {
-			fprintf(fp, "&fft_dct2_inv_%i", N);
+			fprintf(fp, "&fft_dct3_%i", N);
+		}
+		if (N != Nmax) {
+			fprintf(fp, ", ");
+		}
+	}
+	fprintf(fp, "\n};\n\n");
+	fprintf(fp, "fft_type fft_dct4_pointer[FFT_NMAX + 1] = {");
+	for (int N = 0; N <= Nmax; N++) {
+		if (N % 8 == 0) {
+			fprintf(fp, "\n\t");
+		}
+		if (N < Nmin) {
+			fprintf(fp, "nullptr");
+		} else {
+			fprintf(fp, "&fft_dct4_%i", N);
 		}
 		if (N != Nmax) {
 			fprintf(fp, ", ");
@@ -250,11 +328,17 @@ int main(int argc, char **argv) {
 	fprintf(fp, "void fft_real_inv(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_real_inv_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
+	fprintf(fp, "void fft_dct1(double* x, int N) {\n");
+	fprintf(fp, "\t(*fft_dct1_pointer[N])(x);\n");
+	fprintf(fp, "}\n\n\n");
 	fprintf(fp, "void fft_dct2(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_dct2_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
-	fprintf(fp, "void fft_dct2_inv(double* x, int N) {\n");
-	fprintf(fp, "\t(*fft_dct2_inv_pointer[N])(x);\n");
+	fprintf(fp, "void fft_dct3(double* x, int N) {\n");
+	fprintf(fp, "\t(*fft_dct3_pointer[N])(x);\n");
+	fprintf(fp, "}\n\n\n");
+	fprintf(fp, "void fft_dct4(double* x, int N) {\n");
+	fprintf(fp, "\t(*fft_dct4_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
 
 	fclose(fp);
@@ -278,10 +362,16 @@ int main(int argc, char **argv) {
 		fprintf(fp, "fft.real_inv.%i.o ", n);
 	}
 	for (int n = Nmin; n <= Nmax; n++) {
+		fprintf(fp, "fft.dct1.%i.o ", n);
+	}
+	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.dct2.%i.o ", n);
 	}
 	for (int n = Nmin; n <= Nmax; n++) {
-		fprintf(fp, "fft.dct2_inv.%i.o ", n);
+		fprintf(fp, "fft.dct3.%i.o ", n);
+	}
+	for (int n = Nmin; n <= Nmax; n++) {
+		fprintf(fp, "fft.dct4.%i.o ", n);
 	}
 	fprintf(fp, "\n%%.o: %%.cpp $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
