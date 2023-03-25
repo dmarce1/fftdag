@@ -53,6 +53,7 @@ std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts) {
 		xin[1] = tmp - xin[1];
 		return std::move(xin);
 	}
+	assert(N%2==0);
 	std::vector<cmplx> xout(N);
 	auto u0 = fft_modsplit(split_even(xin, N), N / 2, opts);
 	auto zp = fft_modsplitS(split_podd(xin, N), N / 4);
@@ -88,6 +89,7 @@ std::vector<cmplx> fft_modsplitS(std::vector<cmplx> xin, int N) {
 		xin[1] = tmp - xin[1];
 		return std::move(xin);
 	}
+	assert(N%2==0);
 	std::vector<cmplx> xout(N);
 	auto u0 = fft_modsplitS2(split_even(xin, N), N / 2);
 	auto zp = fft_modsplitS(split_podd(xin, N), N / 4);
@@ -123,6 +125,7 @@ std::vector<cmplx> fft_modsplitS2(std::vector<cmplx> xin, int N) {
 		xin[1] = tmp - xin[1];
 		return std::move(xin);
 	}
+	assert(N%2==0);
 	std::vector<cmplx> xout(N);
 	auto u0 = fft_modsplitS4(split_even(xin, N), N / 2);
 	auto zp = fft_modsplitS(split_podd(xin, N), N / 4);
@@ -162,6 +165,7 @@ std::vector<cmplx> fft_modsplitS4(std::vector<cmplx> xin, int N) {
 		xin[1] = x1;
 		return std::move(xin);
 	}
+	assert(N%2==0);
 	std::vector<cmplx> xout(N);
 	auto u0 = fft_modsplitS2(split_even(xin, N), N / 2);
 	auto zp = fft_modsplitS(split_podd(xin, N), N / 4);
