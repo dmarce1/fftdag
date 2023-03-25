@@ -33,7 +33,6 @@ void fftw(std::vector<std::complex<double>>& x);
 const std::vector<std::complex<double>> twiddles(int N);
 const std::vector<std::complex<double>> raders_four_twiddle(int N);
 const std::vector<std::complex<double>> raders_four_twiddle(int N, int M);
-
-
+bool are_coprime(int a, int b);
 
 #endif

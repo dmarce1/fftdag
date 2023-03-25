@@ -15,5 +15,6 @@
 
 std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts );
 std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts);
+std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts);
 void fft_reset();
 void print_fft_bests();

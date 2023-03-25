@@ -6,7 +6,7 @@ std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opt
 	assert(is_prime(R) && prime_factorization(N).size() == 1);
 	cmplx I( { 0.0, 1.0 });
 	if (N == R) {
-		return fft_singleton(xin, N, opts);
+		assert(false);
 	}
 	const int N1 = R;
 	const int N2 = N / R;

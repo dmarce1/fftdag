@@ -26,6 +26,7 @@ static int mod_inv(int a, int m) {
 	return mod_pow(a, m - 2, m);
 }
 
+
 static int generator(int N) {
 	static thread_local std::unordered_map<int, int> values;
 	auto i = values.find(N);
@@ -217,4 +218,18 @@ std::map<int, int> prime_factorization(int N) {
 		N /= k;
 	}
 	return map;
+}
+
+
+bool are_coprime(int a, int b) {
+	auto afacs = prime_factorization(a);
+	auto bfacs = prime_factorization(b);
+	for (auto i : afacs) {
+		for (auto j : bfacs) {
+			if (i.first == j.first) {
+				return false;
+			}
+		}
+	}
+	return true;
 }

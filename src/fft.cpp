@@ -11,7 +11,8 @@
 #define RADERS_PADDED 4
 #define PRIME_POWER 5
 #define PRIME_FACTOR 6
-#define NFFT 7
+#define TANGENT 7
+#define NFFT 8
 
 std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_radix4(std::vector<cmplx> xin, int N, int opts);
@@ -149,6 +150,20 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 	return std::move(xout);
 }
 
+std::set<int> radices_prime_factor(std::map<int, int> pfac, int N, int R = 1) {
+	std::set<int> radices;
+	if (R != 1 && R != N) {
+		radices.insert(R);
+	}
+	for (auto i = pfac.begin(); i != pfac.end(); i++) {
+		auto pfac1 = pfac;
+		pfac1.erase(i->first);
+		auto tmp = radices_prime_factor(pfac1, N, R * std::pow(i->first, i->second));
+		radices.insert(tmp.begin(), tmp.end());
+	}
+	return radices;
+}
+
 int op_count(const std::vector<cmplx>& xs) {
 	std::vector<math_vertex> outs;
 	for (auto x : xs) {
@@ -156,19 +171,6 @@ int op_count(const std::vector<cmplx>& xs) {
 		outs.push_back(x.y);
 	}
 	return math_vertex::operation_count(outs).total();
-}
-
-bool are_coprime(int a, int b) {
-	auto afacs = prime_factorization(a);
-	auto bfacs = prime_factorization(b);
-	for (auto i : afacs) {
-		for (auto j : bfacs) {
-			if (i.first == j.first) {
-				return false;
-			}
-		}
-	}
-	return true;
 }
 
 std::vector<int> fft_input_signature(std::vector<cmplx> xin) {
@@ -224,11 +226,11 @@ std::vector<int> fft_input_signature(std::vector<cmplx> xin) {
 		}
 		done[i] = true;
 	}
-/*	fprintf(stderr, "%i: ", sig.size());
-	for (int n = 0; n < sig.size(); n++) {
-		fprintf(stderr, "%i ", sig[n]);
-	}
-	fprintf(stderr, "\n");*/
+	/*	fprintf(stderr, "%i: ", sig.size());
+	 for (int n = 0; n < sig.size(); n++) {
+	 fprintf(stderr, "%i ", sig[n]);
+	 }
+	 fprintf(stderr, "\n");*/
 	return sig;
 }
 
@@ -264,6 +266,7 @@ struct best_x {
 struct best_y {
 	int R;
 	int method;
+	int cnt;
 };
 
 static std::map<best_x, best_y> best;
@@ -297,12 +300,11 @@ void print_fft_bests() {
 		case RADIX2:
 			method += "radix-2";
 			break;
+		case TANGENT:
+			method += "tangent";
+			break;
 		case RADIX4:
-			if (1 << ilogb(i->first.N) == i->first.N) {
-				method += "tangent";
-			} else {
-				method += "split";
-			}
+			method += "split4";
 			break;
 		case SINGLETON:
 			method += "Singleton";
@@ -322,7 +324,7 @@ void print_fft_bests() {
 		default:
 			assert(false);
 		}
-		fprintf(stderr, "%32s | %16s | %i\n", opts.c_str(), method.c_str(), i->second.R);
+		fprintf(stderr, "%32s | %16s | %i x %i\n", opts.c_str(), method.c_str(), i->second.R, i->first.N / i->second.R);
 	}
 }
 
@@ -353,59 +355,66 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 	X.opts = opts;
 	if (best.find(X) == best.end()) {
 		int huge = std::numeric_limits<int>::max();
-		std::vector<std::array<int, NFFT>> results(factors.size());
-		for (int i = 0; i < factors.size(); i++) {
-			for (int j = 0; j < NFFT; j++) {
-				results[i][j] = huge;
+		std::vector<best_y> tries;
+		best_y y;
+		if (N % 2 == 0) {
+			y.R = 2;
+			y.method = RADIX2;
+			y.cnt = op_count(fft_radix2(xin, N, opts));
+			tries.push_back(y);
+			if (N % 4 == 0) {
+				y.R = 4;
+				y.method = RADIX4;
+				y.cnt = op_count(fft_radix4(xin, N, opts));
+				tries.push_back(y);
 			}
-		}
-		for (int i = 0; i < factors.size(); i++) {
-			int R = factors[i];
-			int rc;
-			if (R == 2) {
-				results[i][RADIX2] = op_count(fft_radix2(xin, N, opts));
+			if (1 << ilogb(N) == N) {
+				y.R = 4;
+				y.method = TANGENT;
+				y.cnt = op_count(fft_modsplit(xin, N, opts));
+				tries.push_back(y);
 			}
-			if (R == 4) {
-				if (1 << ilogb(N) == N) {
-					results[i][RADIX4] = op_count(fft_modsplit(xin, N, opts));
-				} else {
-					results[i][RADIX4] = op_count(fft_radix4(xin, N, opts));
+		} else {
+			if (is_prime(N)) {
+				y.R = N;
+				y.method = SINGLETON;
+				y.cnt = op_count(fft_singleton(xin, N, opts));
+				tries.push_back(y);
+				y.R = N;
+				y.method = RADERS;
+				y.cnt = op_count(fft_raders(xin, N, false, opts));
+				tries.push_back(y);
+				y.R = N;
+				y.method = RADERS_PADDED;
+				y.cnt = op_count(fft_raders(xin, N, true, opts));
+				tries.push_back(y);
+			}
+			if (pfac.size() == 1) {
+				if (pfac.begin()->second > 1) {
+					y.R = pfac.begin()->first;
+					y.method = PRIME_POWER;
+					y.cnt = op_count(fft_prime_power(y.R, xin, N, opts));
+					tries.push_back(y);
 				}
 			}
-			if (R != 2 && is_prime(R) && N == R) {
-				results[i][SINGLETON] = op_count(fft_singleton(xin, N, opts));
-			}
-			if (R != 2 && is_prime(R) && N == R) {
-				results[i][RADERS] = op_count(fft_raders(xin, N, false, opts));
-			}
-			if (R != 2 && is_prime(R) && N == R) {
-				results[i][RADERS_PADDED] = op_count(fft_raders(xin, N, true, opts));
-			}
-			if (R % 2 != 0 && is_prime(R) && (pfac.size() == 1) && N != R) {
-				results[i][PRIME_POWER] = op_count(fft_prime_power(R, xin, N, opts));
-			}
-			if (are_coprime(R, N / R) && N != R) {
-				results[i][PRIME_FACTOR] = op_count(fft_prime_factor(R, N / R, xin, opts));
-			}
 		}
-		int besti;
-		int bestj = -1;
+		auto rpf = radices_prime_factor(pfac, N);
+		for (auto R : rpf) {
+			y.R = R;
+			y.method = PRIME_FACTOR;
+			y.cnt = op_count(fft_prime_factor(R, N / R, xin, opts));
+			tries.push_back(y);
+		}
+		int besti = -1;
 		int bestcnt = huge;
-		for (int i = 0; i < factors.size(); i++) {
-			for (int j = 0; j < NFFT; j++) {
-				if (results[i][j] < bestcnt) {
-					bestcnt = results[i][j];
-					besti = i;
-					bestj = j;
-				}
+		for (int i = 0; i < tries.size(); i++) {
+			if (tries[i].cnt < bestcnt) {
+				bestcnt = tries[i].cnt;
+				besti = i;
 			}
 		}
-		assert(bestj != -1);
-		assert(factors[besti] > 1);
-		best_y Y;
-		Y.R = factors[besti];
-		Y.method = bestj;
-		best[X] = Y;
+		assert(besti != -1);
+		best[X] = tries[besti];
 	}
 	auto Y = best[X];
 	auto R = Y.R;
@@ -425,6 +434,9 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 		break;
 	case RADERS:
 		xout = fft_raders(xin, N, false, opts);
+		break;
+	case TANGENT:
+		xout = fft_modsplit(xin, N, opts);
 		break;
 	case RADERS_PADDED:
 		xout = fft_raders(xin, N, true, opts);
