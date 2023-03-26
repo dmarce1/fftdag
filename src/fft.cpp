@@ -6,13 +6,15 @@
 
 #define RADIX2 0
 #define RADIX4 1
-#define SINGLETON 2
-#define RADERS 3
-#define RADERS_PADDED 4
-#define PRIME_POWER 5
-#define PRIME_FACTOR 6
-#define TANGENT 7
-#define NFFT 8
+#define RADIX6 2
+#define SINGLETON 3
+#define RADERS 4
+#define RADERS_PADDED 5
+#define PRIME_POWER 6
+#define PRIME_FACTOR 7
+#define TANGENT 8
+#define COOLEYTUKEY 9
+#define NFFT 10
 
 std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_radix4(std::vector<cmplx> xin, int N, int opts);
@@ -164,6 +166,23 @@ std::set<int> radices_prime_factor(std::map<int, int> pfac, int N, int R = 1) {
 	return radices;
 }
 
+std::set<int> radices_cooley_tukey(std::map<int, int> pfac, int N, int R = 1) {
+	std::set<int> radices;
+	if (R != 1 && R != N) {
+		radices.insert(R);
+	}
+	for (auto i = pfac.begin(); i != pfac.end(); i++) {
+		auto pfac1 = pfac;
+		pfac1[i->first]--;
+		if (pfac1[i->first] <= 0) {
+			pfac1.erase(i->first);
+		}
+		auto tmp = radices_prime_factor(pfac1, N, R * i->first);
+		radices.insert(tmp.begin(), tmp.end());
+	}
+	return radices;
+}
+
 int op_count(const std::vector<cmplx>& xs) {
 	std::vector<math_vertex> outs;
 	for (auto x : xs) {
@@ -306,6 +325,9 @@ void print_fft_bests() {
 		case RADIX4:
 			method += "split4";
 			break;
+		case RADIX6:
+			method += "split6";
+			break;
 		case SINGLETON:
 			method += "Singleton";
 			break;
@@ -318,13 +340,22 @@ void print_fft_bests() {
 		case PRIME_POWER:
 			method += "radix-n";
 			break;
+		case COOLEYTUKEY:
+			method += "Cooley-Tukey";
+			break;
 		case PRIME_FACTOR:
 			method += "Good-Thomas";
 			break;
 		default:
 			assert(false);
 		}
-		fprintf(stderr, "%32s | %16s | %i x %i\n", opts.c_str(), method.c_str(), i->second.R, i->first.N / i->second.R);
+		if (i->second.method == RADIX6) {
+			fprintf(stderr, "%32s | %16s | %i x %i \n", opts.c_str(), method.c_str(), i->second.R, i->first.N / i->second.R);
+			for (int n = 0; n < i->first.sig.size(); n++) {
+				fprintf(stderr, "%i ", i->first.sig[n]);
+			}
+			fprintf( stderr, "\n");
+		}
 	}
 }
 
@@ -352,6 +383,16 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 	best_x X;
 	X.N = N;
 	X.sig = fft_input_signature(xin);
+	bool allzero = true;
+	for (int n = 0; n < X.sig.size(); n++) {
+		if (X.sig[n]) {
+			allzero = false;
+			break;
+		}
+	}
+	if (allzero) {
+		return xin;
+	}
 	X.opts = opts;
 	if (best.find(X) == best.end()) {
 		int huge = std::numeric_limits<int>::max();
@@ -362,10 +403,10 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 			y.method = RADIX2;
 			y.cnt = op_count(fft_radix2(xin, N, opts));
 			tries.push_back(y);
-			if (N % 4 == 0) {
-				y.R = 4;
-				y.method = RADIX4;
-				y.cnt = op_count(fft_radix4(xin, N, opts));
+			if (N % 3 == 0) {
+				y.R = 6;
+				y.method = RADIX6;
+				y.cnt = op_count(fft_radix6(xin, N, opts));
 				tries.push_back(y);
 			}
 			if (1 << ilogb(N) == N) {
@@ -405,6 +446,13 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 			y.cnt = op_count(fft_prime_factor(R, N / R, xin, opts));
 			tries.push_back(y);
 		}
+		auto rct = radices_cooley_tukey(pfac, N);
+		for (auto R : rct) {
+			y.R = R;
+			y.method = COOLEYTUKEY;
+			y.cnt = op_count(fft_cooley_tukey(R, N / R, xin, opts));
+			tries.push_back(y);
+		}
 		int besti = -1;
 		int bestcnt = huge;
 		for (int i = 0; i < tries.size(); i++) {
@@ -423,11 +471,10 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 		xout = fft_radix2(xin, N, opts);
 		break;
 	case RADIX4:
-		if (1 << ilogb(N) == N) {
-			xout = fft_modsplit(xin, N, opts);
-		} else {
-			xout = fft_radix4(xin, N, opts);
-		}
+		xout = fft_radix4(xin, N, opts);
+		break;
+	case RADIX6:
+		xout = fft_radix6(xin, N, opts);
 		break;
 	case SINGLETON:
 		xout = fft_singleton(xin, N, opts);
@@ -446,6 +493,9 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 		break;
 	case PRIME_FACTOR:
 		xout = fft_prime_factor(R, N / R, xin, opts);
+		break;
+	case COOLEYTUKEY:
+		xout = fft_cooley_tukey(R, N / R, xin, opts);
 		break;
 	default:
 		assert(false);
