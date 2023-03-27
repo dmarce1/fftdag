@@ -7,7 +7,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 29;
+constexpr int Nmax = 16;
 
 int main(int argc, char **argv) {
 
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 			X[n].x = x[2 * n];
 			X[n].y = x[2 * n + 1];
 		}
-		auto Y = convolve(X, h);
+		auto Y = convolve(X, h, 0);
 		std::vector<math_vertex> y;
 		for( int n = 0; n < N; n++) {
 			y.push_back(Y[n].x);

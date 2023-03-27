@@ -300,11 +300,11 @@ std::vector<std::vector<cmplx>> convolve_fast_7(std::vector<std::vector<cmplx>> 
 	auto b4 = (2.0 * h[6] - 1.0 * h[5] - 2.0 * h[4] + 3.0 * h[3] - 1.0 * h[2] - 2.0 * h[1] + 1.0 * h[0]);
 	auto b5 = (1.0/2.0) * (-2.0 * h[6] + 1.0 * h[5] + 2.0 * h[4] - 1.0 * h[3] - 2.0 * h[2] + 3.0 * h[1] - 1.0 * h[0]);
 	auto b6 = (1.0/14.0) * (3.0 * h[6] - 11.0 * h[5] - 4.0 * h[4] + 10.0 * h[3] + 3.0 * h[2] - 11.0 * h[1] + 10.0 * h[0]);
-
 	auto b7 = (1.0/6.0) * (3.0 * h[6] - 1.0 * h[5] - 0.0 * h[4] - 2.0 * h[3] + 3.0 * h[2] - 1.0 * h[1] - 2.0 * h[0]);
+
 	auto b8 = (1.0/6.0) * (h[5] - h[3] + h[1] - h[0]);
 	auto b9 = (-1.0 * h[6] - 2.0 * h[5] + 1.0 * h[4] + 2.0 * h[3] - 1.0 * h[2] - 2.0 * h[1] + 3.0 * h[0]);
-	auto b10 = (1.0/2.0) * (2.0 * h[4] - h[3] - 2.0 * h[2]+h[1]);
+	auto b10 = (1.0/2.0) * (2.0 * h[4] - h[3] - 2.0 * h[2] + h[1]);
 	auto b11 = (1.0/14.0)*(-2.0 * h[6] - 2.0 * h[5] - 2.0 * h[4] + 12.0 * h[3] + 5.0 * h[2] - 9.0 * h[1] - 2.0 * h[0]);
 	auto b12 = (1.0/6.0) * (-2.0 * h[3] + 3.0 * h[2] - h[1]);
 	auto b13 = (1.0/6.0) * (h[1] - h[3]);
@@ -394,6 +394,23 @@ bool can_fast_cyclic(int N) {
 	};
 }
 
+bool can_agarwal(int N) {
+	auto pfacs = prime_factorization(N);
+	if (pfacs.size() > 1) {
+		for (auto fac : pfacs) {
+			if (!can_fast_cyclic(std::pow(fac.first, fac.second))) {
+				return false;
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+#define FFT_CONVOLVE 0
+#define FAST_CONVOLVE 1
+#define SLOW_CONVOLVE 2
+
 std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
 	int N = x.size();
 	if (N == 1) {
@@ -414,26 +431,85 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 			y[n] = Y[n][0];
 		}
 	} else if (pfacs.size() == 1) {
-		std::vector<std::vector<cmplx>> X(N);
-		std::vector<std::vector<std::complex<double>>>H(N);
+		int M = 2 * N - 1;
+		while (!can_agarwal(M)) {
+			M++;
+		}
+		std::vector<cmplx> x0(M, cmplx( { 0.0, 0.0 }));
+		std::vector<std::complex<double>> h0(M, std::complex<double>( { 0.0, 0.0 }));
 		for (int n = 0; n < N; n++) {
-			X[n].push_back(x[n]);
-			H[n].push_back(h[n]);
+			x0[n] = x[n];
 		}
-		auto ya = convolve_aperiodic(X, H);
-		for (int n = 0; n < N - 1; n++) {
-			y[n] = ya[n][0] + ya[n + N][0];
+		h0[0] = h[0];
+		for (int n = 1; n < N - 1; n++) {
+			h0[M + n + 1 - N] = h0[n] = h[n];
 		}
-		y[N - 1] = ya[N - 1][0];
+		y = convolve_fast(x0, h0);
+		y.resize(N);
 	} else {
-		int N2 = 1;
-		auto p = prime_factorization(N);
-		std::vector<std::pair<int, int>> pfacs(p.begin(), p.end());
-		int N1 = std::pow(pfacs[0].first, pfacs[0].second);
-		for (int n = 1; n < pfacs.size(); n++) {
-			N2 *= std::pow(pfacs[n].first, pfacs[n].second);
+		static std::map<best_x, int> cache;
+		best_x XX;
+		XX.opts = 0;
+		XX.N = N;
+		XX.sig = fft_input_signature(x);
+		if (cache.find(XX) == cache.end()) {
+			int jcnt;
+			int J;
+			int Nb;
+			for (J = 0; J < 2; J++) {
+				int N1, N2;
+				if (J == 0) {
+					N2 = 1;
+					auto p = prime_factorization(N);
+					std::vector<std::pair<int, int>> pfacs(p.begin(), p.end());
+					N1 = std::pow(pfacs.back().first, pfacs.back().second);
+					pfacs.pop_back();
+					for (int n = 0; n < pfacs.size(); n++) {
+						N2 *= std::pow(pfacs[n].first, pfacs[n].second);
+					}
+				} else {
+					N2 = 1;
+					auto p = prime_factorization(N);
+					std::vector<std::pair<int, int>> pfacs(p.begin(), p.end());
+					N1 = std::pow(pfacs.front().first, pfacs.front().second);
+					for (int n = 1; n < pfacs.size(); n++) {
+						N2 *= std::pow(pfacs[n].first, pfacs[n].second);
+					}
+				}
+				std::vector<std::vector<cmplx>> X(N1, std::vector<cmplx>(N2));
+				std::vector<std::vector<std::complex<double>>>H(N1, std::vector<std::complex<double>>(N2));
+				for (int n1 = 0; n1 < N1; n1++) {
+					X[n1].resize(N2);
+					H[n1].resize(N2);
+					for (int n2 = 0; n2 < N2; n2++) {
+						const int n = (n1 * N2 + n2 * N1) % N;
+						X[n1][n2] = x[n];
+						H[n1][n2] = h[n];
+					}
+				}
+				auto Y = convolve_fast(X, H);
+				for (int n1 = 0; n1 < N1; n1++) {
+					for (int n2 = 0; n2 < N2; n2++) {
+						const int n = (n1 * N2 + n2 * N1) % N;
+						y[n] = Y[n1][n2];
+					}
+				}
+				int cnt = math_vertex::operation_count(y).total();
+				if (J == 0) {
+					jcnt = cnt;
+					Nb = N1;
+				} else {
+					if (cnt > jcnt) {
+						J = 0;
+						Nb = N1;
+					}
+					break;
+				}
+			}
+			cache[XX] = Nb;
 		}
-		//	fprintf( stderr, "%i = %i x %i\n", N, N1, N2);
+		auto N1 = cache[XX];
+		auto N2 = N / N1;
 		std::vector<std::vector<cmplx>> X(N1, std::vector<cmplx>(N2));
 		std::vector<std::vector<std::complex<double>>>H(N1, std::vector<std::complex<double>>(N2));
 		for (int n1 = 0; n1 < N1; n1++) {
@@ -459,7 +535,7 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 	return y;
 }
 
-std::vector<cmplx> convolve_N2(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
+std::vector<cmplx> convolve_slow(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
 	int N = x.size();
 	std::vector<cmplx> y(N, cmplx( { 0.0, 0.0 }));
 	for (int n = 0; n < N; n++) {
@@ -470,22 +546,37 @@ std::vector<cmplx> convolve_N2(std::vector<cmplx> x, std::vector<std::complex<do
 	return y;
 }
 
-std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
+std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<double>> h, int opts) {
 	int N = x.size();
 	if (N == 1) {
 		return std::vector<cmplx>(1, x[0] * h[0]);
 	}
-//	return convolve_fast(x, h);
-	int fast_cnt;
-	int fft_cnt;
-	std::vector<cmplx> y;
-	fast_cnt = math_vertex::operation_count(x * h).total();
-	fft_cnt = math_vertex::operation_count(convolve_fft(x, h)).total();
-	fprintf(stderr, "%i : %i %i\n", N, fft_cnt, fast_cnt);
-	if (fast_cnt < fft_cnt) {
-		return convolve_fast(x, h);
-	} else {
+	static std::map<best_x, int> cache;
+	best_x X;
+	X.opts = opts;
+	X.N = N;
+	X.sig = fft_input_signature(x);
+	if (cache.find(X) == cache.end()) {
+		int slow_cnt;
+		int fast_cnt;
+		int fft_cnt;
+		std::vector<cmplx> y;
+		fast_cnt = math_vertex::operation_count(x * h).total();
+		fft_cnt = math_vertex::operation_count(convolve_fft(x, h)).total();
+		if (fft_cnt < fast_cnt) {
+			cache[X] = FFT_CONVOLVE;
+		} else {
+			cache[X] = FAST_CONVOLVE;
+		}
+	}
+	switch (cache[X]) {
+	case FFT_CONVOLVE:
 		return convolve_fft(x, h);
+	case FAST_CONVOLVE:
+		return x * h;
+	default:
+		assert(false);
+		return std::vector<cmplx>();
 	}
 }
 
@@ -494,16 +585,7 @@ std::vector<cmplx> operator*(std::vector<cmplx> x, std::vector<std::complex<doub
 	if (N == 1) {
 		return std::vector<cmplx>(1, x[0] * h[0]);
 	}
-	int fast_cnt;
-	int naive_cnt;
-	std::vector<cmplx> y;
-	fast_cnt = math_vertex::operation_count(convolve_fast(x, h)).total();
-	naive_cnt = math_vertex::operation_count(convolve_N2(x, h)).total();
-	if (naive_cnt < fast_cnt) {
-		return convolve_N2(x, h);
-	} else {
-		return convolve_fast(x, h);
-	}
+	return convolve_fast(x, h);
 }
 
 std::vector<std::vector<cmplx>> convolve_aperiodic(std::vector<std::vector<cmplx>> x, std::vector<std::vector<std::complex<double>>>h)
