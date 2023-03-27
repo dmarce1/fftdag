@@ -430,23 +430,7 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 		for (int n = 0; n < N; n++) {
 			y[n] = Y[n][0];
 		}
-	} else if (pfacs.size() == 1) {
-		int M = 2 * N - 1;
-		while (!can_agarwal(M)) {
-			M++;
-		}
-		std::vector<cmplx> x0(M, cmplx( { 0.0, 0.0 }));
-		std::vector<std::complex<double>> h0(M, std::complex<double>( { 0.0, 0.0 }));
-		for (int n = 0; n < N; n++) {
-			x0[n] = x[n];
-		}
-		h0[0] = h[0];
-		for (int n = 1; n < N - 1; n++) {
-			h0[M + n + 1 - N] = h0[n] = h[n];
-		}
-		y = convolve_fast(x0, h0);
-		y.resize(N);
-	} else {
+	} else if (can_agarwal(N)) {
 		static std::map<best_x, int> cache;
 		best_x XX;
 		XX.opts = 0;
@@ -528,6 +512,22 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 				y[n] = Y[n1][n2];
 			}
 		}
+	} else {
+		int M = 2 * N - 1;
+		while (!can_agarwal(M)) {
+			M++;
+		}
+		std::vector<cmplx> x0(M, cmplx( { 0.0, 0.0 }));
+		std::vector<std::complex<double>> h0(M, std::complex<double>( { 0.0, 0.0 }));
+		for (int n = 0; n < N; n++) {
+			x0[n] = x[n];
+		}
+		h0[0] = h[0];
+		for (int n = 1; n < N - 1; n++) {
+			h0[M + n + 1 - N] = h0[n] = h[n];
+		}
+		y = convolve_fast(x0, h0);
+		y.resize(N);
 	}
 	for (int n = 0; n < N; n++) {
 		y[n].set_goal();
@@ -551,6 +551,7 @@ std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<doubl
 	if (N == 1) {
 		return std::vector<cmplx>(1, x[0] * h[0]);
 	}
+	return convolve_fft(x, h);
 	static std::map<best_x, int> cache;
 	best_x X;
 	X.opts = opts;

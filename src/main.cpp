@@ -7,7 +7,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 16;
+constexpr int Nmax = 32;
 
 int main(int argc, char **argv) {
 
