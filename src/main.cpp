@@ -2,14 +2,15 @@
 #include "fft.hpp"
 #include "util.hpp"
 #include "pebble.hpp"
+#include "convolve.hpp"
 
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 36;
+constexpr int Nmax = 16;
 
 int main(int argc, char **argv) {
-	math_vertex::print_cse();
+
 //	srand(time(NULL));
 //	int N = 29;
 //	auto inputs = math_vertex::new_inputs(2 * N);
@@ -22,6 +23,36 @@ int main(int argc, char **argv) {
 //abort();
 	int cnt1 = 0;
 	int cnt2 = 0;
+	fprintf( stderr, "------------------------------CONVOLVE-----------------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		if (!is_prime(N + 1)) {
+			continue;
+		}
+		auto h = raders_four_twiddle(N + 1);
+		auto x = math_vertex::new_inputs(2 * N);
+		std::vector<cmplx> X(N);
+		for (int n = 0; n < N; n++) {
+			X[n].x = x[2 * n];
+			X[n].y = x[2 * n + 1];
+		}
+		auto Y = X * h;
+		std::vector<math_vertex> y;
+		for( int n = 0; n < N; n++) {
+			y.push_back(Y[n].x);
+			y.push_back(Y[n].y);
+		}
+		auto cnt = math_vertex::operation_count(y);
+		auto tmp = math_vertex::execute_all(std::move(x), y);
+		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+		auto code = tmp.first;
+		std::string fname = "convolve." + std::to_string(N) + ".cpp";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		code = std::string("\n\nvoid convolve_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+		cnt1 += tmp.second;
+		cnt2 += cnt.total();
+	}
 	fprintf( stderr, "------------------------------COMPLEX-----------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(2 * N);
@@ -153,11 +184,19 @@ int main(int argc, char **argv) {
 	}
 	fprintf( stderr, "O: %i D: %i\n", cnt2, cnt1);
 	system("cp ../../gen_src/main.cpp .\n");
+	system("cp ../../gen_src/util.cpp .\n");
+	system("cp ../../gen_src/util.hpp .\n");
 
 	FILE* fp = fopen("fft.hpp", "wt");
 	fprintf(fp, "#pragma once\n\n");
 	fprintf(fp, "#define FFT_NMAX %i\n", Nmax);
 	fprintf(fp, "#define FFT_NMIN %i\n\n\n", Nmin);
+	for (int N = Nmin; N <= Nmax; N++) {
+		if (!is_prime(N + 1)) {
+			continue;
+		}
+		fprintf(fp, "void convolve_%i(double*);\n", N);
+	}
 	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void fft_complex_%i(double*);\n", N);
 	}
@@ -182,6 +221,7 @@ int main(int argc, char **argv) {
 	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void fft_dct4_%i(double*);\n", N);
 	}
+	fprintf(fp, "\n\nvoid convolve(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_complex(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_complex_inv(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_real(double*, int);\n");
@@ -194,6 +234,23 @@ int main(int argc, char **argv) {
 	fclose(fp);
 
 	fp = fopen("fft.cpp", "wt");
+	fprintf(fp, "#include \"fft.hpp\"\n\n\n");
+	fprintf(fp, "using fft_type = void(*)(double*);\n\n");
+	fprintf(fp, "fft_type convolve_pointer[FFT_NMAX + 1] = {");
+	for (int N = 0; N <= Nmax; N++) {
+		if (N % 8 == 0) {
+			fprintf(fp, "\n\t");
+		}
+		if (N < Nmin || !is_prime(N + 1)) {
+			fprintf(fp, "nullptr");
+		} else {
+			fprintf(fp, "&convolve_%i", N);
+		}
+		if (N != Nmax) {
+			fprintf(fp, ", ");
+		}
+	}
+	fprintf(fp, "\n};\n\n");
 	fprintf(fp, "#include \"fft.hpp\"\n\n\n");
 	fprintf(fp, "using fft_type = void(*)(double*);\n\n");
 	fprintf(fp, "fft_type fft_complex_pointer[FFT_NMAX + 1] = {");
@@ -316,6 +373,9 @@ int main(int argc, char **argv) {
 		}
 	}
 	fprintf(fp, "\n};\n\n");
+	fprintf(fp, "void convolve(double* x, int N) {\n");
+	fprintf(fp, "\t(*convolve_pointer[N])(x);\n");
+	fprintf(fp, "}\n\n\n");
 	fprintf(fp, "void fft_complex(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_complex_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
@@ -348,7 +408,13 @@ int main(int argc, char **argv) {
 	fprintf(fp, "CFLAGS=-I. -Ofast -march=native\n");
 //	fprintf(fp, "CFLAGS=-I. -g -D_GLIBCXX_DEBUG\n");
 	fprintf(fp, "DEPS = fft.hpp\n");
-	fprintf(fp, "OBJ = main.o fft.o ");
+	fprintf(fp, "OBJ = main.o fft.o util.o ");
+	for (int n = Nmin; n <= Nmax; n++) {
+		if (!is_prime(n + 1)) {
+			continue;
+		}
+		fprintf(fp, "convolve.%i.o ", n);
+	}
 	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.complex.%i.o ", n);
 	}

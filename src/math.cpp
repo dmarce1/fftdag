@@ -346,7 +346,7 @@ math_vertex::op_cnt_t math_vertex::operation_count(dag_vertex<properties>::execu
 	return cnt;
 }
 
-math_vertex::op_cnt_t math_vertex::operation_count(std::vector<math_vertex>& outputs) {
+math_vertex::op_cnt_t math_vertex::operation_count(std::vector<math_vertex> outputs) {
 	op_cnt_t cnt;
 	cnt.add = cnt.mul = cnt.neg = 0;
 	dag_vertex<properties>::executor exe(false);
@@ -357,6 +357,15 @@ math_vertex::op_cnt_t math_vertex::operation_count(std::vector<math_vertex>& out
 		cnt.neg += this_cnt.neg;
 	}
 	return cnt;
+}
+
+math_vertex::op_cnt_t math_vertex::operation_count(std::vector<cmplx> x) {
+	std::vector<math_vertex> X;
+	for( int i = 0; i < x.size(); i++) {
+		X.push_back(x[i].x);
+		X.push_back(x[i].y);
+	}
+	return operation_count(X);
 }
 
 void math_vertex::set_group_id(int id) {

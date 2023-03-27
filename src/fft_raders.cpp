@@ -1,6 +1,5 @@
 #include "fft.hpp"
-
-
+#include "convolve.hpp"
 
 std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int opts) {
 	assert(is_prime(N));
@@ -14,7 +13,6 @@ std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int op
 	} else {
 		M = N - 1;
 	}
-
 	const auto& b = padded ? raders_four_twiddle(N, M) : raders_four_twiddle(N);
 	const auto& gq = raders_gq(N);
 	const auto& ginvq = raders_ginvq(N);
@@ -28,21 +26,13 @@ std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int op
 	if (M != N - 1) {
 		o = M << 16;
 	}
-	a = fft(a, M, opts);
-	xout[0] = xin[0] + a[0];
-	for (int q = 0; q < M; q++) {
-		c[q] = a[q] * cmplx(b[q]);
+	xout[0] = xin[0];
+	for (int n = 1; n < N; n++) {
+		xout[0] += xin[n];
 	}
-	a = c;
-	for (int q = 0; q < M; q++) {
-		std::swap(a[q].x, a[q].y);
-	}
-	a = fft(a, M, opts);
-	for (int q = 0; q < M; q++) {
-		std::swap(a[q].x, a[q].y);
-	}
+	c = a * b;
 	for (int p = 0; p < N - 1; p++) {
-		xout[ginvq[p]] = xin[0] + a[p];
+		xout[ginvq[p]] = xin[0] + c[p];
 	}
 	return std::move(xout);
 }

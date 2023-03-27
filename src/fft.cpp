@@ -6,7 +6,6 @@
 
 #define RADIX2 0
 #define RADIX4 1
-#define RADIX6 2
 #define SINGLETON 3
 #define RADERS 4
 #define RADERS_PADDED 5
@@ -14,7 +13,7 @@
 #define PRIME_FACTOR 7
 #define TANGENT 8
 #define COOLEYTUKEY 9
-#define NFFT 10
+#define NFFT 9
 
 std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_radix4(std::vector<cmplx> xin, int N, int opts);
@@ -325,9 +324,6 @@ void print_fft_bests() {
 		case RADIX4:
 			method += "split4";
 			break;
-		case RADIX6:
-			method += "split6";
-			break;
 		case SINGLETON:
 			method += "Singleton";
 			break;
@@ -349,7 +345,7 @@ void print_fft_bests() {
 		default:
 			assert(false);
 		}
-		if (i->second.method == RADIX6) {
+		if (false) {
 			fprintf(stderr, "%32s | %16s | %i x %i \n", opts.c_str(), method.c_str(), i->second.R, i->first.N / i->second.R);
 			for (int n = 0; n < i->first.sig.size(); n++) {
 				fprintf(stderr, "%i ", i->first.sig[n]);
@@ -403,12 +399,6 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 			y.method = RADIX2;
 			y.cnt = op_count(fft_radix2(xin, N, opts));
 			tries.push_back(y);
-			if (N % 3 == 0) {
-				y.R = 6;
-				y.method = RADIX6;
-				y.cnt = op_count(fft_radix6(xin, N, opts));
-				tries.push_back(y);
-			}
 			if (1 << ilogb(N) == N) {
 				y.R = 4;
 				y.method = TANGENT;
@@ -472,9 +462,6 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 		break;
 	case RADIX4:
 		xout = fft_radix4(xin, N, opts);
-		break;
-	case RADIX6:
-		xout = fft_radix6(xin, N, opts);
 		break;
 	case SINGLETON:
 		xout = fft_singleton(xin, N, opts);

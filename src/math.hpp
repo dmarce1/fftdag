@@ -25,7 +25,7 @@ typedef enum {
 bool is_arithmetic(operation_t op);
 
 class cse_database;
-
+class cmplx;
 class math_vertex;
 
 class math_vertex {
@@ -146,7 +146,8 @@ public:
 	std::vector<math_vertex> available2execute(dag_vertex<properties>::executor& exe, dag_vertex<properties>::executor& exe1);
 	std::string execute(dag_vertex<properties>::executor& exe);
 	static math_vertex new_input(std::shared_ptr<name_server> db, std::string&& name);
-	static op_cnt_t operation_count(std::vector<math_vertex>&);
+	static op_cnt_t operation_count(std::vector<math_vertex>);
+	static op_cnt_t operation_count(std::vector<cmplx>);
 	static std::vector<math_vertex> new_inputs(int cnt);
 	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices);
 	static void optimize(std::vector<math_vertex>& vertices);
@@ -179,6 +180,10 @@ struct cmplx {
 	math_vertex y;
 	cmplx() = default;
 	cmplx(const cmplx &) = default;
+	void set_goal() {
+		x.set_goal();
+		y.set_goal();
+	}
 	cmplx operator+(cmplx other) const {
 		cmplx C;
 		C.x = x + other.x;
