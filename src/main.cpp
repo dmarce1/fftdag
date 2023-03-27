@@ -28,6 +28,7 @@ int main(int argc, char **argv) {
 		if (!is_prime(N + 1)) {
 			continue;
 		}
+
 		auto h = raders_four_twiddle(N + 1);
 		auto x = math_vertex::new_inputs(2 * N);
 		std::vector<cmplx> X(N);

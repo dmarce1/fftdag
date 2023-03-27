@@ -43,28 +43,28 @@ std::vector<std::complex<double>> convolve_test(std::vector<std::complex<double>
 }
 
 /*void fftw(std::vector<std::complex<double>>& x) {
- const int N = x.size();
- static std::unordered_map<int, fftw_plan> plans;
- static std::unordered_map<int, fftw_complex*> in;
- static std::unordered_map<int, fftw_complex*> out;
- if (plans.find(N) == plans.end()) {
- in[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);
- out[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);
- plans[N] = fftw_plan_dft_1d(N, in[N], out[N], FFTW_FORWARD, FFTW_ESTIMATE);
- }
- auto* i = in[N];
- auto* o = out[N];
- for (int n = 0; n < N; n++) {
- i[n][0] = x[n].real();
- i[n][1] = x[n].imag();
- }
- fftw_execute(plans[N]);
- for (int n = 0; n < N; n++) {
- x[n].real(o[n][0]);
- x[n].imag(o[n][1]);
- }
+	const int N = x.size();
+	static std::unordered_map<int, fftw_plan> plans;
+	static std::unordered_map<int, fftw_complex*> in;
+	static std::unordered_map<int, fftw_complex*> out;
+	if (plans.find(N) == plans.end()) {
+		in[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);
+		out[N] = (fftw_complex*) malloc(sizeof(fftw_complex) * N);
+		plans[N] = fftw_plan_dft_1d(N, in[N], out[N], FFTW_FORWARD, FFTW_ESTIMATE);
+	}
+	auto* i = in[N];
+	auto* o = out[N];
+	for (int n = 0; n < N; n++) {
+		i[n][0] = x[n].real();
+		i[n][1] = x[n].imag();
+	}
+	fftw_execute(plans[N]);
+	for (int n = 0; n < N; n++) {
+		x[n].real(o[n][0]);
+		x[n].imag(o[n][1]);
+	}
 
- }*/
+}*/
 
 void fftw_inv(std::vector<std::complex<double>>& x) {
 	const int N = x.size();
@@ -625,7 +625,7 @@ void test() {
 			for (int n = 0; n < N; n++) {
 				err += std::abs(Y[n]) * std::abs(Y[n]);
 				max = std::max(max, std::abs(X0[n]));
-			//	printf("%i %e %e %e %e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag());
+		//			printf("%i %e %e %e %e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag());
 			}
 			err = sqrt(err / N) / max;
 		}
