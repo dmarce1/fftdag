@@ -7,7 +7,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 16;
+constexpr int Nmax = 32;
 
 int main(int argc, char **argv) {
 
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 			X[n].x = x[2 * n];
 			X[n].y = x[2 * n + 1];
 		}
-		auto Y = X * h;
+		auto Y = convolve(X, h);
 		std::vector<math_vertex> y;
 		for( int n = 0; n < N; n++) {
 			y.push_back(Y[n].x);
@@ -53,6 +53,7 @@ int main(int argc, char **argv) {
 		cnt1 += tmp.second;
 		cnt2 += cnt.total();
 	}
+	fprintf( stderr, "O: %i D: %i\n", cnt2, cnt1);
 	fprintf( stderr, "------------------------------COMPLEX-----------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(2 * N);

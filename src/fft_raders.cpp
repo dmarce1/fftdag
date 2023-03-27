@@ -30,7 +30,7 @@ std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int op
 	for (int n = 1; n < N; n++) {
 		xout[0] += xin[n];
 	}
-	c = a * b;
+	c = convolve(a, b);
 	for (int p = 0; p < N - 1; p++) {
 		xout[ginvq[p]] = xin[0] + c[p];
 	}
