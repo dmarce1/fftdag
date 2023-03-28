@@ -599,7 +599,7 @@ void test() {
 		timer tm1, tm2;
 		double err;
 		double max;
-		for (int ti = 0; ti < 1; ti++) {
+		for (int ti = 0; ti < 256; ti++) {
 			err = 0.0;
 			max = 0.0;
 			std::vector<std::complex<double>> X(N);
@@ -619,12 +619,12 @@ void test() {
 			tm2.stop();
 			tm4.stop();
 			for (int i = 0; i < X.size(); i++) {
-			//	Y[i] -= X[i];
+				Y[i] -= X[i];
 			}
 			for (int n = 0; n < N; n++) {
 				err += std::abs(Y[n]) * std::abs(Y[n]);
 				max = std::max(max, std::abs(X0[n]));
-			printf("%i %e %e %e %e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag());
+			//	printf("%i %e %e %e %e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag());
 			}
 			err = sqrt(err / N) / max;
 		}

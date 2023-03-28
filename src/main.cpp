@@ -7,7 +7,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 9;
+constexpr int Nmax = 64;
 
 //#define USE_DCT
 
@@ -34,15 +34,21 @@ int main(int argc, char **argv) {
 			X[n].x = x[2 * n];
 			X[n].y = x[2 * n + 1];
 		}
-		auto Y = convolve(X, h, 0);
+		auto Y = convolve_fast(X, h);
+		auto Z = convolve_fft(X, h);
 		std::vector<math_vertex> y;
 		for (int n = 0; n < N; n++) {
 			y.push_back(Y[n].x);
 			y.push_back(Y[n].y);
 		}
 		auto cnt = math_vertex::operation_count(y);
+		auto cnt3 = math_vertex::operation_count(Z);
+		if (cnt.total() == 0 || cnt.total() > cnt3.total()) {
+			Y = std::move(Z);
+		}
 		auto tmp = math_vertex::execute_all(std::move(x), y);
-		fprintf(stderr, "N = %4i | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+		fprintf(stderr, "N = %4i%2s | tot = %4i(%4i) | add = %4i(%4i) | mul = %4i(%4i) | neg = %4i(%4i) | decls = %i\n", N, cnt.total() < cnt3.total() ? "^*" : "", cnt.total(), cnt3.total(), cnt.add, cnt3.add, cnt.mul, cnt3.mul, cnt.neg, cnt3.neg,
+				tmp.second);
 		auto code = tmp.first;
 		std::string fname = "convolve." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");

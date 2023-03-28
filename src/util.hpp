@@ -20,6 +20,8 @@ inline bool close2(double a, double b ) {
 	return std::abs(a - b) < 1.0e-12;
 }
 
+int mod(int a, int b);
+bool power_of(int N, int M);
 std::vector<std::vector<int>> nchoosek(int n, int k);
 bool is_prime(int n);
 int greatest_prime_factor(int N);

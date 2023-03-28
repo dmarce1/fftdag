@@ -9,6 +9,23 @@
 #include <complex>
 #include <fftw3.h>
 
+int mod(int a, int b) {
+	while (a < 0) {
+		a += b;
+	}
+	return a % b;
+}
+
+bool power_of(int N, int M) {
+	while (N > 1) {
+		if (N % M != 0) {
+			return false;
+		}
+		N /= M;
+	}
+	return true;
+}
+
 int mod_pow(int a, int b, int m) {
 	int rc = 1;
 	int apow = a;
