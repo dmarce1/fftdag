@@ -1,6 +1,7 @@
 #include "fft.hpp"
 #include "util.hpp"
 
+std::vector<cmplx> convolve_karatsuba2(std::vector<cmplx> x, std::vector<std::complex<double>> h);
 std::vector<cmplx> convolve_karatsuba(std::vector<cmplx> x, std::vector<std::complex<double>> h);
 std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<double>> h);
 std::vector<cmplx> convolve_fft(std::vector<cmplx> x, std::vector<std::complex<double>> h);
@@ -54,60 +55,22 @@ std::vector<cmplx> operator*(std::vector<cmplx> x1, double a) {
 	return a * x1;
 }
 
-std::vector<std::vector<cmplx>> convolve_radix2(std::vector<std::vector<cmplx>> x, std::vector<std::vector<std::complex<double>>>h) {
+std::vector<cmplx> convolve_radix3(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
 	int N = x.size();
-	if( N == 1 ) {
-		return std::vector<std::vector<cmplx>>(1, convolve_fast(x[0], h[0]));
+	if (N == 1) {
+		return std::vector<cmplx>(1, x[0] * h[0]);
 	}
-	std::vector<std::vector<cmplx>> y(2 * N - 1);
-	std::vector<std::vector<cmplx>> xlo(N / 2), xhi(N / 2), xmd(N / 2);
-	std::vector<std::vector<std::complex<double>>> hlo(N / 2), hhi(N / 2), hmd(N / 2);
-	for (int n = 0; n < N / 2; n++) {
-		xlo[n] = x[n];
-		xhi[n] = x[n + N / 2];
-		xmd[n] = xlo[n] + xhi[n];
-		hlo[n] = h[n];
-		hhi[n] = h[n + N / 2];
-		hmd[n] = hlo[n] + hhi[n];
-	}
-	auto ylo = convolve_aperiodic(xlo, hlo);
-	auto ymd = convolve_aperiodic(xmd, hmd);
-	auto yhi = convolve_aperiodic(xhi, hhi);
-	for (int n = 0; n < N - 1; n++) {
-		ymd[n] = ymd[n] - ylo[n] - yhi[n];
-	}
-	for (int n = 0; n < 2 * N - 1; n++) {
-		y[n] = std::vector<cmplx>(x[0].size(), cmplx( {0.0,0.0}));
-	}
-	for (int n = 0; n < N - 1; n++) {
-		y[n] = y[n] + ylo[n];
-		y[n + N / 2] = y[n + N / 2] + ymd[n];
-		y[n + N] = y[n + N] + yhi[n];
-	}
-	for (int n = 0; n < 2*N-1; n++) {
-		for( auto& yy : y[n]) {
-			yy.set_goal();
-		}
-	}
-	return y;
-}
-
-std::vector<std::vector<cmplx>> convolve_radix3(std::vector<std::vector<cmplx>> x, std::vector<std::vector<std::complex<double>>>h) {
-	int N = x.size();
-	if( N == 1 ) {
-		return std::vector<std::vector<cmplx>>(1, convolve_fast(x[0], h[0]));
-	}
-	std::vector<std::vector<cmplx>> y(2 * N - 1);
-	std::vector<std::vector<cmplx>> a2(N / 3), a3(N / 3), a4(N / 3), a5(N / 3), a6(N / 3);
-	std::vector<std::vector<std::complex<double>>> b0(N / 3), b1(N / 3), b2(N / 3), b3(N / 3), b4(N / 3);
-	std::vector<std::vector<cmplx>> u1(2 * N / 3 - 1), u2(2 * N / 3 - 1), u3(2 * N / 3 - 1), u4(2 * N / 3 - 1), u5(2 * N / 3 - 1);
+	std::vector<cmplx> y(2 * N - 1);
+	std::vector<cmplx> a2(N / 3), a3(N / 3), a4(N / 3), a5(N / 3), a6(N / 3);
+	std::vector<std::complex<double>> b0(N / 3), b1(N / 3), b2(N / 3), b3(N / 3), b4(N / 3);
+	std::vector<cmplx> u1(2 * N / 3 - 1), u2(2 * N / 3 - 1), u3(2 * N / 3 - 1), u4(2 * N / 3 - 1), u5(2 * N / 3 - 1);
 	for (int n = 0; n < N / 3; n++) {
-		auto x0 = x[n];
-		auto x1 = x[n + N / 3];
-		auto x2 = x[n + 2 * N / 3];
-		auto h0 = h[n];
-		auto h1 = h[n + N / 3];
-		auto h2 = h[n + 2 * N / 3];
+		auto x0 = x[3 * n];
+		auto x1 = x[3 * n + 1];
+		auto x2 = x[3 * n + 2];
+		auto h0 = h[3 * n];
+		auto h1 = h[3 * n + 1];
+		auto h2 = h[3 * n + 2];
 		auto a0 = x1 + x2;
 		auto a1 = x2 - x1;
 		a2[n] = x0;
@@ -121,12 +84,12 @@ std::vector<std::vector<cmplx>> convolve_radix3(std::vector<std::vector<cmplx>> 
 		b3[n] = (1.0 / 6.0) * (h0 + 2.0 * h1 + 4.0 * h2);
 		b4[n] = h2;
 	}
-	auto m0 = convolve_aperiodic(a2, b0);
-	auto m1 = convolve_aperiodic(a3, b1);
-	auto m2 = convolve_aperiodic(a4, b2);
-	auto m3 = convolve_aperiodic(a5, b3);
-	auto m4 = convolve_aperiodic(a6, b4);
-	for (int n = 0; n < 2 * N / 3 - 1; n++) {
+	auto m0 = convolve_radix3(a2, b0);
+	auto m1 = convolve_radix3(a3, b1);
+	auto m2 = convolve_radix3(a4, b2);
+	auto m3 = convolve_radix3(a5, b3);
+	auto m4 = convolve_radix3(a6, b4);
+	for (int n = 0; n < N / 3; n++) {
 		auto u0 = 2.0 * m4[n];
 		u1[n] = 2.0 * m1[n];
 		u2[n] = 2.0 * m0[n];
@@ -134,22 +97,13 @@ std::vector<std::vector<cmplx>> convolve_radix3(std::vector<std::vector<cmplx>> 
 		u4[n] = u0 - m0[n] - m3[n];
 		u5[n] = m1[n] + m2[n];
 	}
-
+	for (int n = 0; n < N / 3; n++) {
+		y[3 * n + 0] = u2[n];
+		y[3 * n + 1] = u1[n] - u3[n] + u4[n];
+		y[3 * n + 2] = -u2[n] + u3[n] + u5[n] - m4[n];
+	}
 	for (int n = 0; n < 2 * N - 1; n++) {
-		y[n] = std::vector<cmplx>(x[0].size(), cmplx( {0.0,0.0}));
-	}
-	for (int n = 0; n < 2 * N / 3 - 1; n++) {
-		y[n + 0 * N / 3] = y[n + 0 * N / 3] + u2[n];
-		y[n + 1 * N / 3] = y[n + 1 * N / 3] + u1[n] - u3[n] + u4[n];
-		y[n + 2 * N / 3] = y[n + 2 * N / 3] + -u2[n] + u3[n] + u5[n] - m4[n];
-		y[n + 3 * N / 3] = y[n + 3 * N / 3] + -u4[n] - u5[n];
-		y[n + 4 * N / 3] = y[n + 4 * N / 3] + m4[n];
-
-	}
-	for (int n = 0; n < 2*N-1; n++) {
-		for( auto& yy : y[n]) {
-			yy.set_goal();
-		}
+		y[n].set_goal();
 	}
 	return y;
 }
@@ -411,6 +365,16 @@ bool can_agarwal(int N) {
 #define FAST_CONVOLVE 1
 #define SLOW_CONVOLVE 2
 
+bool power_of(int N, int M) {
+	while (N > 1) {
+		if (N % M != 0) {
+			return false;
+		}
+		N /= M;
+	}
+	return true;
+}
+
 std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
 	int N = x.size();
 	if (N == 1) {
@@ -430,6 +394,8 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 		for (int n = 0; n < N; n++) {
 			y[n] = Y[n][0];
 		}
+	} else if (power_of(N, 2)) {
+		return convolve_karatsuba2(x, h);
 	} else if (can_agarwal(N)) {
 		static std::map<best_x, int> cache;
 		best_x XX;
@@ -523,8 +489,8 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 			x0[n] = x[n];
 		}
 		h0[0] = h[0];
-		for (int n = 1; n < N - 1; n++) {
-			h0[M + n + 1 - N] = h0[n] = h[n];
+		for (int n = 1; n < N; n++) {
+			h0[M + n - N] = h0[n] = h[n];
 		}
 		y = convolve_fast(x0, h0);
 		y.resize(N);
@@ -551,7 +517,6 @@ std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<doubl
 	if (N == 1) {
 		return std::vector<cmplx>(1, x[0] * h[0]);
 	}
-	return convolve_fft(x, h);
 	static std::map<best_x, int> cache;
 	best_x X;
 	X.opts = opts;
@@ -564,11 +529,11 @@ std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<doubl
 		std::vector<cmplx> y;
 		fast_cnt = math_vertex::operation_count(x * h).total();
 		fft_cnt = math_vertex::operation_count(convolve_fft(x, h)).total();
-		if (fft_cnt < fast_cnt) {
-			cache[X] = FFT_CONVOLVE;
-		} else {
-			cache[X] = FAST_CONVOLVE;
-		}
+		//	if (fft_cnt < fast_cnt) {
+		//		cache[X] = FFT_CONVOLVE;
+		//	} else {
+		cache[X] = FAST_CONVOLVE;
+		//	}
 	}
 	switch (cache[X]) {
 	case FFT_CONVOLVE:
@@ -587,30 +552,6 @@ std::vector<cmplx> operator*(std::vector<cmplx> x, std::vector<std::complex<doub
 		return std::vector<cmplx>(1, x[0] * h[0]);
 	}
 	return convolve_fast(x, h);
-}
-
-std::vector<std::vector<cmplx>> convolve_aperiodic(std::vector<std::vector<cmplx>> x, std::vector<std::vector<std::complex<double>>>h)
-{
-	std::vector<std::vector<cmplx>> y;
-	int N = x.size();
-	if (N == 1) {
-		return std::vector<std::vector<cmplx>>(1, convolve_fast(x[0], h[0]));
-	}
-	if (N % 2 != 0 && N % 3 != 0) {
-		x.push_back(std::vector<cmplx>(x[0].size(), cmplx( {0.0, 0.0})));
-		h.push_back(std::vector<std::complex<double>>(x[0].size(), {0.0, 0.0}));
-	}
-	int M = x.size();
-	if (M % 3 == 0) {
-		y = convolve_radix3(x, h);
-	} else {
-		y = convolve_radix2(x, h);
-	}
-	if (M != N) {
-		y.pop_back();
-		y.pop_back();
-	}
-	return y;
 }
 
 std::vector<cmplx> convolve_fft(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
@@ -633,31 +574,40 @@ std::vector<cmplx> convolve_fft(std::vector<cmplx> x, std::vector<std::complex<d
 	return std::move(y);
 }
 
+int mod(int a, int b) {
+	while (a < 0) {
+		a += b;
+	}
+	return a % b;
+}
+
 std::vector<cmplx> convolve_karatsuba2(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
 	int N = x.size();
 	if (N == 1) {
 		return std::vector<cmplx>(1, x[0] * h[0]);
 	}
 	std::vector<cmplx> y(N, cmplx( { 0.0, 0.0 }));
-	std::vector<cmplx> xlo(N / 2), xhi(N / 2), xmd(N / 2);
-	std::vector<std::complex<double>> hlo(N / 2), hhi(N / 2), hmd(N / 2);
+	std::vector<cmplx> xeven(N / 2), xodd(N / 2), x00(N / 2);
+	std::vector<std::complex<double>> heven(N / 2), hodd(N / 2), h00(N / 2);
 	for (int n = 0; n < N / 2; n++) {
-		xlo[n] = x[2 * n];
-		xhi[n] = x[2 * n + 1];
-		hlo[n] = h[2 * n];
-		hhi[n] = h[2 * n + 1];
-		xmd[n] = x[2 * n] + x[2 * n + 1];
-		hmd[n] = h[2 * n] + h[(2 * n + 1 + N) % N];
-	}
-	auto ylo = convolve_karatsuba2(xlo, hlo);
-	auto ymd = convolve_karatsuba2(xmd, hmd);
-	auto yhi = convolve_karatsuba2(xhi, hhi);
-	for (int n = 0; n < N / 2; n++) {
-		ymd[n] -= ylo[n] + yhi[n];
+		xeven[n] = x[2 * n];
+		xodd[n] = x[2 * n + 1];
+		heven[n] = h[2 * n];
+		hodd[n] = h[2 * n + 1];
 	}
 	for (int n = 0; n < N / 2; n++) {
-		y[2 * n] = ylo[n] + yhi[(n - 1 + (N / 2)) % (N / 2)];
-		y[2 * n + 1] = ymd[n];
+		x00[n] = xeven[n] + xodd[mod(n - 1, N / 2)];
+		h00[n] = heven[n] + hodd[n];
+	}
+	auto yee = convolve_karatsuba2(xeven, heven);
+	auto yoo = convolve_karatsuba2(xodd, hodd);
+//	auto yeo = convolve_karatsuba2(xeven, hodd);
+//	auto yoe = convolve_karatsuba2(xodd, heven);
+	auto y00 = convolve_karatsuba2(x00, h00);
+	for (int n = 0; n < N / 2; n++) {
+		y[2 * n] = yee[n] + yoo[n];
+//		y[2 * n + 1] = yeo[mod(n + 1, N / 2)] + yoe[n];
+		y[mod(2 * n - 1, N)] = y00[n] - yee[n] - yoo[mod(n - 1, N / 2)];
 	}
 	for (int n = 0; n < N; n++) {
 		y[n].set_goal();

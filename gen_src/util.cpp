@@ -136,6 +136,15 @@ __int128 factorial(__int128 k) {
 	}
 }
 
+std::vector<std::complex<double>> chirp_z_filter(int N) {
+	std::vector<std::complex<double>> z(N);
+	for( int n = 0; n < N; n++) {
+		z[n] = std::polar(1.0, M_PI * n * n / N);
+	}
+	return z;
+}
+
+
 std::vector<std::vector<int>> nchoosek(int n, int k) {
 	std::vector<std::vector<int>> rc;
 	std::vector<int> combo(k);

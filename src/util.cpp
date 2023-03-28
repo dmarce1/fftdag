@@ -128,6 +128,14 @@ const std::vector<std::complex<double>> raders_four_twiddle(int N, int M) {
 	return b;
 }
 
+std::vector<std::complex<double>> chirp_z_filter(int N) {
+	std::vector<std::complex<double>> z(N);
+	for( int n = 0; n < N; n++) {
+		z[n] = std::polar(1.0, M_PI * n * n / N);
+	}
+	return z;
+}
+
 __int128 factorial(__int128 k) {
 	if (k <= 1) {
 		return 1;

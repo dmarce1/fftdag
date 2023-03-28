@@ -32,7 +32,7 @@ public:
 
 std::vector<std::complex<double>> convolve_test(std::vector<std::complex<double>> x) {
 	int N = x.size();
-	auto h = raders_four_twiddle(N + 1);
+	auto h = chirp_z_filter(N);
 	std::vector<std::complex<double>> y(N, std::complex<double>( { 0.0, 0.0 }));
 	for (int n = 0; n < N; n++) {
 		for (int m = 0; m < N; m++) {
@@ -434,6 +434,7 @@ void test() {
 		}
 		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
 	}
+#ifdef USE_DCT
 	tm3.reset();
 	tm4.reset();
 	printf("\nDCT-I\n");
@@ -590,17 +591,15 @@ void test() {
 		}
 		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
 	}
+#endif
 	tm3.reset();
 	tm4.reset();
 	printf("\nCONVOLUTION\n");
 	for (int N = FFT_NMIN; N <= FFT_NMAX; N += 1) {
-		if (!is_prime(N + 1)) {
-			continue;
-		}
 		timer tm1, tm2;
 		double err;
 		double max;
-		for (int ti = 0; ti < 256; ti++) {
+		for (int ti = 0; ti < 1; ti++) {
 			err = 0.0;
 			max = 0.0;
 			std::vector<std::complex<double>> X(N);
@@ -620,12 +619,12 @@ void test() {
 			tm2.stop();
 			tm4.stop();
 			for (int i = 0; i < X.size(); i++) {
-				Y[i] -= X[i];
+			//	Y[i] -= X[i];
 			}
 			for (int n = 0; n < N; n++) {
 				err += std::abs(Y[n]) * std::abs(Y[n]);
 				max = std::max(max, std::abs(X0[n]));
-		//			printf("%i %e %e %e %e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag());
+				printf("%i %e %e %e %e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag());
 			}
 			err = sqrt(err / N) / max;
 		}

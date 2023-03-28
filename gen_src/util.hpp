@@ -19,7 +19,7 @@
 inline bool close2(double a, double b ) {
 	return std::abs(a - b) < 1.0e-12;
 }
-
+std::vector<std::complex<double>> chirp_z_filter(int N);
 std::vector<std::vector<int>> nchoosek(int n, int k);
 bool is_prime(int n);
 int greatest_prime_factor(int N);
