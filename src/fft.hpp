@@ -19,6 +19,7 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_cooley_tukey(int N1, int N2, std::vector<cmplx> xin, int opts);
 void fft_reset();
 void print_fft_bests();
+bool can_agarwal(int N);
 
 
 inline std::vector<int> fft_input_signature(std::vector<cmplx> xin) {

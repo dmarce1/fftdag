@@ -12,7 +12,7 @@ constexpr int Nmax = 9;
 //#define USE_DCT
 
 int main(int argc, char **argv) {
-
+	int pct = 0;
 //	srand(time(NULL));
 //	int N = 29;
 //	auto inputs = math_vertex::new_inputs(2 * N);
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 		}
 		auto Y = convolve(X, h, 0);
 		std::vector<math_vertex> y;
-		for( int n = 0; n < N; n++) {
+		for (int n = 0; n < N; n++) {
 			y.push_back(Y[n].x);
 			y.push_back(Y[n].y);
 		}
@@ -242,7 +242,7 @@ int main(int argc, char **argv) {
 		if (N % 8 == 0) {
 			fprintf(fp, "\n\t");
 		}
-		if (N < Nmin ) {
+		if (N < Nmin) {
 			fprintf(fp, "nullptr");
 		} else {
 			fprintf(fp, "&convolve_%i", N);
