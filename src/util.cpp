@@ -54,11 +54,16 @@ static int mod_inv(int a, int m) {
 static int generator(int N) {
 	static thread_local std::unordered_map<int, int> values;
 	auto i = values.find(N);
+	auto factors = prime_factorization(N);
+	int P = factors.begin()->first;
+	int c = factors.begin()->second;
+	int M = std::pow(P, c - 1) * (P - 1);
 	if (i == values.end()) {
 		for (int g = 2;; g++) {
+			fprintf(stderr, "%i\n", g);
 			std::set<int> I;
 			bool fail = false;
-			for (int m = 1; m < N - 2; m++) {
+			for (int m = 1; m < M; m++) {
 				if (are_coprime(m, N)) {
 					int n = mod_pow(g, m, N);
 					if (I.find(n) == I.end()) {
@@ -76,6 +81,7 @@ static int generator(int N) {
 			}
 		}
 	}
+	fprintf(stderr, "N = %i g = %i\n", N, i->second);
 	return i->second;
 }
 

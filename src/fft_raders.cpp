@@ -10,7 +10,7 @@ int calc_padding(int N) {
 }
 
 std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int opts) {
-	std::vector<cmplx> xout(N);
+	std::vector<cmplx> xout(N, cmplx( { 0.0, 0.0 }));
 	auto prime_fac = prime_factorization(N);
 	assert(prime_fac.size() == 1);
 	int P = prime_fac.begin()->first;
@@ -38,12 +38,14 @@ std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int op
 	x1 = fft(x1, L, opts);
 	x2 = convolve(x2, b, opts);
 	for (int k1 = 0; k1 < L; k1++) {
-		xout[P * k1] = x0[k1];
+		xout[P * k1] += x0[k1];
 	}
 	if (L > 1) {
 		for (int k1 = 0; k1 < P; k1++) {
-			for (int k2 = 1; k2 < L; k2++) {
-				xout[L * k1 + k2] = x1[k2];
+			for (int k2 = 0; k2 < L; k2++) {
+				if (k2 % P != 0) {
+					xout[L * k1 + k2] += x1[k2];
+				}
 			}
 		}
 	} else {

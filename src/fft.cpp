@@ -191,7 +191,6 @@ int op_count(const std::vector<cmplx>& xs) {
 	return math_vertex::operation_count(outs).total();
 }
 
-
 struct best_y {
 	int R;
 	int method;
@@ -322,16 +321,17 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 				y.method = SINGLETON;
 				y.cnt = op_count(fft_singleton(xin, N, opts));
 				tries.push_back(y);
+				//	y.R = N;
+				//	y.method = RADERS_PADDED;
+				//	y.cnt = op_count(fft_raders(xin, N, true, opts));
+				//	tries.push_back(y);
+			}
+			if (pfac.size() == 1) {
 				y.R = N;
 				y.method = RADERS;
 				y.cnt = op_count(fft_raders(xin, N, false, opts));
+				y.cnt = 10;
 				tries.push_back(y);
-				y.R = N;
-				y.method = RADERS_PADDED;
-				y.cnt = op_count(fft_raders(xin, N, true, opts));
-				tries.push_back(y);
-			}
-			if (pfac.size() == 1) {
 				if (pfac.begin()->second > 1) {
 					y.R = pfac.begin()->first;
 					y.method = PRIME_POWER;
