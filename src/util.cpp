@@ -8,6 +8,11 @@
 #include <set>
 #include <complex>
 #include <fftw3.h>
+#include <cassert>
+
+std::map<int, int> prime_factorization(int N);
+
+bool are_coprime(int a, int b);
 
 int mod(int a, int b) {
 	while (a < 0) {
@@ -53,13 +58,15 @@ static int generator(int N) {
 		for (int g = 2;; g++) {
 			std::set<int> I;
 			bool fail = false;
-			for (int m = 0; m < N - 2; m++) {
-				int n = mod_pow(g, m, N);
-				if (I.find(n) == I.end()) {
-					I.insert(n);
-				} else {
-					fail = true;
-					break;
+			for (int m = 1; m < N - 2; m++) {
+				if (are_coprime(m, N)) {
+					int n = mod_pow(g, m, N);
+					if (I.find(n) == I.end()) {
+						I.insert(n);
+					} else {
+						fail = true;
+						break;
+					}
 				}
 			}
 			if (!fail) {
@@ -76,7 +83,12 @@ std::vector<int> raders_ginvq(int N) {
 	const int g = generator(N);
 	std::vector<int> ginvq;
 	for (int q = 0; q < N - 1; q++) {
-		ginvq.push_back(mod_inv(mod_pow(g, q, N), N));
+		for (int gqinv = 1; gqinv < N; gqinv++) {
+			if ((gqinv * mod_pow(g, q, N)) % N == 1) {
+				ginvq.push_back(gqinv);
+				break;
+			}
+		}
 	}
 	return ginvq;
 }
@@ -123,10 +135,15 @@ const std::vector<std::complex<double>> twiddles(int N) {
 }
 
 const std::vector<std::complex<double>> raders_four_twiddle(int N) {
-	std::vector<std::complex<double>> b(N - 1);
+	auto factors = prime_factorization(N);
+	assert(factors.size() == 1);
+	int P = factors.begin()->first;
+	int c = factors.begin()->second;
+	int M = std::pow(P, c - 1) * (P - 1);
+	std::vector<std::complex<double>> b(M);
 	const auto tws = twiddles(N);
 	const auto ginvq = raders_ginvq(N);
-	for (int q = 0; q < N - 1; q++) {
+	for (int q = 0; q < M; q++) {
 		b[q] = tws[ginvq[q]];
 	}
 	//fftw(b);
@@ -147,7 +164,7 @@ const std::vector<std::complex<double>> raders_four_twiddle(int N, int M) {
 
 std::vector<std::complex<double>> chirp_z_filter(int N) {
 	std::vector<std::complex<double>> z(N);
-	for( int n = 0; n < N; n++) {
+	for (int n = 0; n < N; n++) {
 		z[n] = std::polar(1.0, M_PI * n * n / N);
 	}
 	return z;

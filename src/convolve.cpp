@@ -790,7 +790,6 @@ std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<doubl
 		} else {
 			cache[X] = FFT_CONVOLVE;
 		}
-		cache[X] = FFT_CONVOLVE;
 	}
 	switch (cache[X]) {
 	case FFT_CONVOLVE:
