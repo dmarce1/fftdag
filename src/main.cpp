@@ -3,6 +3,7 @@
 #include "util.hpp"
 #include "pebble.hpp"
 #include "convolve.hpp"
+#include "polynomial.hpp"
 
 #include <time.h>
 
@@ -12,6 +13,21 @@ constexpr int Nmax = 32;
 //#define USE_DCT
 
 int main(int argc, char **argv) {
+	polynomial<double> A, B;
+	A.resize(3);
+	B.resize(2);
+	A[3] = 1.0;
+	A[2] = 1.0;
+	A[1] = -2.0;
+	A[0] = -1.0;
+	B[2] = 1.0;
+	B[1] = 1.0;
+	B[0] = -3.0;
+	auto C = (A * B + B) % A;
+	printf( "%s\n", A.to_str().c_str());
+	printf( "%s\n", B.to_str().c_str());
+	printf( "%s\n", C.to_str().c_str());
+	abort();
 	int pct = 0;
 //	srand(time(NULL));
 //	int N = 29;

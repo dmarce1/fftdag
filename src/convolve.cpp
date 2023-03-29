@@ -785,7 +785,6 @@ std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<doubl
 		fast_cnt = math_vertex::operation_count(x * h).total();
 		fft_cnt = math_vertex::operation_count(convolve_fft(x, h)).total();
 		if (fast_cnt < fft_cnt && fast_cnt > 0) {
-			fprintf(stderr, "N = %i \n", N);
 			cache[X] = FAST_CONVOLVE;
 		} else {
 			cache[X] = FFT_CONVOLVE;

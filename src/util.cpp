@@ -60,7 +60,6 @@ static int generator(int N) {
 	int M = std::pow(P, c - 1) * (P - 1);
 	if (i == values.end()) {
 		for (int g = 2;; g++) {
-			fprintf(stderr, "%i\n", g);
 			std::set<int> I;
 			bool fail = false;
 			for (int m = 1; m < M; m++) {
@@ -81,7 +80,6 @@ static int generator(int N) {
 			}
 		}
 	}
-	fprintf(stderr, "N = %i g = %i\n", N, i->second);
 	return i->second;
 }
 

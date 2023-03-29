@@ -255,7 +255,7 @@ void print_fft_bests() {
 		default:
 			assert(false);
 		}
-		if (false) {
+		if (i->second.method == RADERS) {
 			fprintf(stderr, "%32s | %16s | %i x %i \n", opts.c_str(), method.c_str(), i->second.R, i->first.N / i->second.R);
 			for (int n = 0; n < i->first.sig.size(); n++) {
 				fprintf(stderr, "%i ", i->first.sig[n]);
@@ -330,7 +330,6 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 				y.R = N;
 				y.method = RADERS;
 				y.cnt = op_count(fft_raders(xin, N, false, opts));
-				y.cnt = 10;
 				tries.push_back(y);
 				if (pfac.begin()->second > 1) {
 					y.R = pfac.begin()->first;
