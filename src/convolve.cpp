@@ -560,7 +560,7 @@ std::vector<T> convolve_toom(int R, std::vector<T> x, std::vector<V> h) {
 		}
 	}
 	for (int r = 0; r < 2 * R - 1; r++) {
-		m[r] = a[r] * b[r];
+		m[r] = convolve_dispatch(a[r], b[r]);
 	}
 	for (int n = 0; n < N / R; n++) {
 		for (int r = 0; r < 2 * R - 1; r++) {
@@ -584,12 +584,56 @@ bool can_agarwal(int N) {
 	if (pfacs.size() > 1) {
 		for (auto fac : pfacs) {
 			if (!can_fast_cyclic(std::pow(fac.first, fac.second))) {
+				if (fac.first == 2) {
+					continue;
+				}
+				if (fac.first == 3) {
+					continue;
+				}
+				if (fac.first == 5) {
+					continue;
+				}
 				return false;
 			}
 		}
 		return true;
 	}
 	return false;
+}
+
+template<class T, class V>
+std::vector<T> convolve_tiny(std::vector<T> x, std::vector<V> h);
+
+std::vector<cmplx> convolve_dispatch(std::vector<cmplx> X, std::vector<std::complex<double>> H) {
+	int N = X.size();
+	if (can_fast_cyclic(N)) {
+		return convolve_tiny(X, H);
+	} else if (N % 2 == 0) {
+		return convolve_toom(2, X, H);
+	} else if (N % 3 == 0) {
+		return convolve_toom(3, X, H);
+	} else if (N % 5 == 0) {
+		return convolve_toom(5, X, H);
+	} else {
+		return convolve_fft(X, H);
+	}
+	return std::vector<cmplx>();
+}
+
+std::vector<std::vector<cmplx>> convolve_dispatch(std::vector<std::vector<cmplx>> X, std::vector<std::vector<std::complex<double>>> H) {
+	int N = X.size();
+	if (can_fast_cyclic(N)) {
+		return convolve_tiny(X, H);
+	} else if (N % 2 == 0) {
+		return convolve_toom(2, X, H);
+	} else if (N % 3 == 0) {
+		return convolve_toom(3, X, H);
+	} else if (N % 5 == 0) {
+		return convolve_toom(5, X, H);
+	} else {
+		assert(false);
+	}
+	return std::vector<std::vector<cmplx>>();
 }
 
 template<class T, class V>
@@ -609,7 +653,7 @@ std::vector<T> convolve_agarwal(int N1, int N2, std::vector<T> x, std::vector<V>
 			H[n1][n2] = h[n];
 		}
 	}
-	Y = convolve_tiny(X, H);
+	Y = convolve_dispatch(X, H);
 	for (int n1 = 0; n1 < N1; n1++) {
 		for (int n2 = 0; n2 < N2; n2++) {
 			const int n = (n1 * N2 + n2 * N1) % N;
@@ -672,34 +716,29 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 	X.opts = 0;
 	if (can_fast_cyclic(N)) {
 		y = convolve_tiny(x, h);
-	} else if (pfacs.size() > 1) {
-		if (!can_agarwal(N)) {
-			y = convolve_fft(x, h);
-		} else {
-			static std::map<best_x, int> cache;
-			if (cache.find(X) == cache.end()) {
-				auto p = prime_factorization(N);
-				int best_N1;
-				int best_cnt = 1000000000;
-				for (auto fac : p) {
-					int N1 = std::pow(fac.first, fac.second);
-					if (!can_fast_cyclic(N) && !(N % 2 == 0 || N % 3 == 0 || N % 5 == 0)) {
-						continue;
-					}
-					int N2 = N / N1;
-					int cnt = math_vertex::operation_count(convolve_agarwal(N1, N2, x, h)).total();
-					fprintf(stderr, "N = %i N1 = %i cnt = %i\n", N, N1, cnt);
-					if (cnt < best_cnt) {
-						best_cnt = cnt;
-						best_N1 = N1;
-					}
+	} else if (can_agarwal(N)) {
+		static std::map<best_x, int> cache;
+		if (cache.find(X) == cache.end()) {
+			auto p = prime_factorization(N);
+			int best_N1;
+			int best_cnt = 1000000000;
+			for (auto fac : p) {
+				int N1 = std::pow(fac.first, fac.second);
+				if (!can_fast_cyclic(N) && !(N % 2 == 0 || N % 3 == 0 || N % 5 == 0)) {
+					continue;
 				}
-				cache[X] = best_N1;
+				int N2 = N / N1;
+				int cnt = math_vertex::operation_count(convolve_agarwal(N1, N2, x, h)).total();
+				if (cnt < best_cnt) {
+					best_cnt = cnt;
+					best_N1 = N1;
+				}
 			}
-			int N1 = cache[X];
-			int N2 = N / N1;
-			y = convolve_agarwal(N1, N2, x, h);
+			cache[X] = best_N1;
 		}
+		int N1 = cache[X];
+		int N2 = N / N1;
+		y = convolve_agarwal(N1, N2, x, h);
 	} else {
 		if (N % 5 == 0) {
 			y = convolve_toom(5, x, h);
@@ -746,6 +785,7 @@ std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<doubl
 		fast_cnt = math_vertex::operation_count(x * h).total();
 		fft_cnt = math_vertex::operation_count(convolve_fft(x, h)).total();
 		if (fast_cnt < fft_cnt && fast_cnt > 0) {
+			fprintf(stderr, "N = %i \n", N);
 			cache[X] = FAST_CONVOLVE;
 		} else {
 			cache[X] = FFT_CONVOLVE;
