@@ -361,7 +361,7 @@ math_vertex::op_cnt_t math_vertex::operation_count(std::vector<math_vertex> outp
 
 math_vertex::op_cnt_t math_vertex::operation_count(std::vector<cmplx> x) {
 	std::vector<math_vertex> X;
-	for( int i = 0; i < x.size(); i++) {
+	for (int i = 0; i < x.size(); i++) {
 		X.push_back(x[i].x);
 		X.push_back(x[i].y);
 	}
@@ -653,7 +653,7 @@ bool math_vertex::is_constant() const {
 
 math_vertex math_vertex::optimize() {
 	assert(valid());
-	const auto op = v.properties().op;
+	auto op = v.properties().op;
 	math_vertex c = *this;
 	math_vertex a;
 	math_vertex b;
@@ -797,6 +797,16 @@ math_vertex math_vertex::optimize() {
 					}
 				}
 			}
+		}
+	}
+	op = c.v.properties().op;
+	assert(c.valid());
+	if (is_arithmetic(op)) {
+		assert(a.valid());
+		assert(c.v.get_edge_in_count());
+		if (op != NEG) {
+			assert(b.valid());
+			assert(c.v.get_edge_in_count() == 2);
 		}
 	}
 	return c;

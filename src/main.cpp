@@ -7,7 +7,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 64;
+constexpr int Nmax = 32;
 
 //#define USE_DCT
 
@@ -27,7 +27,11 @@ int main(int argc, char **argv) {
 	int cnt2 = 0;
 	fprintf( stderr, "------------------------------CONVOLVE-----------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
-		auto h = chirp_z_filter(N);
+		std::vector<std::complex<double>> h(N);
+		srand(42);
+		for (int n = 0; n < N; n++) {
+			h[n] = rand() / (RAND_MAX + 0.5);
+		}
 		auto x = math_vertex::new_inputs(2 * N);
 		std::vector<cmplx> X(N);
 		for (int n = 0; n < N; n++) {
@@ -45,6 +49,9 @@ int main(int argc, char **argv) {
 		auto cnt3 = math_vertex::operation_count(Z);
 		if (cnt.total() == 0 || cnt.total() > cnt3.total()) {
 			Y = std::move(Z);
+		}
+		if( cnt.total() == 0 ) {
+			cnt.add = cnt.mul = cnt.neg = 0;
 		}
 		auto tmp = math_vertex::execute_all(std::move(x), y);
 		fprintf(stderr, "N = %4i%2s | tot = %4i(%4i) | add = %4i(%4i) | mul = %4i(%4i) | neg = %4i(%4i) | decls = %i\n", N, cnt.total() < cnt3.total() ? "^*" : "", cnt.total(), cnt3.total(), cnt.add, cnt3.add, cnt.mul, cnt3.mul, cnt.neg, cnt3.neg,

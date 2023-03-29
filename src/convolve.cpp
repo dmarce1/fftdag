@@ -673,7 +673,6 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 		iter++;
 		int N1 = std::pow(pfacs.begin()->first, pfacs.begin()->second);
 		int N2 = N / N1;
-		fprintf( stderr, "%i = %i x %i\n", N, N1, N2);
 		y = convolve_agarwal(N1, N2, x, h);
 	} else {
 		bool flag = true;
@@ -683,7 +682,6 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 			}
 		}
 		if (!flag) {
-			fprintf(stderr, "Warning: Fast convolution not available for size %i, using FFT\n", N);
 			y = convolve_fft(x, h);
 		} else {
 			if (N % 5 == 0) {

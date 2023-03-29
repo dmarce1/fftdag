@@ -32,7 +32,11 @@ public:
 
 std::vector<std::complex<double>> convolve_test(std::vector<std::complex<double>> x) {
 	int N = x.size();
-	auto h = chirp_z_filter(N);
+	auto h = x;
+	srand(42);
+	for( int n = 0; n < x.size(); n++) {
+		h[n] = rand() / (RAND_MAX + 0.5);
+	}
 	std::vector<std::complex<double>> y(N, std::complex<double>( { 0.0, 0.0 }));
 	for (int n = 0; n < N; n++) {
 		for (int m = 0; m < N; m++) {
