@@ -536,25 +536,26 @@ std::vector<T> convolve_fast_9(std::vector<T> x, std::vector<V> h) {
 	return y;
 }
 
-std::vector<cmplx> convolve_toom(int R, std::vector<cmplx> x, std::vector<std::complex<double>> h) {
+template<class T, class V>
+std::vector<T> convolve_toom(int R, std::vector<T> x, std::vector<V> h) {
 	assert(R < 7);
 	int N = x.size();
 	assert(N % R == 0);
 	if (N == 1) {
-		return std::vector<cmplx>(1, x[0] * h[0]);
+		return std::vector<T>(1, x[0] * h[0]);
 	}
-	std::vector<cmplx> y(N);
-	std::vector<std::vector<cmplx>> a(2 * R - 1, std::vector<cmplx>(N / R));
-	std::vector<std::vector<std::complex<double>>>b(2 * R - 1, std::vector<std::complex<double>>(N / R));
-	std::vector<std::vector<cmplx>> c(2 * R - 1, std::vector<cmplx>(N / R));
-	std::vector<std::vector<cmplx>> m(2 * R - 1, std::vector<cmplx>(N / R));
+	std::vector<T> y(N);
+	std::vector<std::vector<T>> a(2 * R - 1, std::vector<T>(N / R));
+	std::vector<std::vector<V>> b(2 * R - 1, std::vector<V>(N / R));
+	std::vector<std::vector<T>> c(2 * R - 1, std::vector<T>(N / R));
+	std::vector<std::vector<T>> m(2 * R - 1, std::vector<T>(N / R));
 	for (int r = 0; r < 2 * R - 1; r++) {
 		for (int n = 0; n < N / R; n++) {
 			a[r][n] = toomA(R, r, 0) * x[R * n];
 			b[r][n] = toomA(R, r, 0) * h[R * n];
 			for (int i = 1; i < R; i++) {
-				a[r][n] += toomA(R, r, i) * x[R * n + i];
-				b[r][n] += toomA(R, r, i) * h[R * n + i];
+				a[r][n] = a[r][n] + toomA(R, r, i) * x[R * n + i];
+				b[r][n] = b[r][n] + toomA(R, r, i) * h[R * n + i];
 			}
 		}
 	}
@@ -565,7 +566,7 @@ std::vector<cmplx> convolve_toom(int R, std::vector<cmplx> x, std::vector<std::c
 		for (int r = 0; r < 2 * R - 1; r++) {
 			c[r][n] = toomB(R, r, 0) * m[0][n];
 			for (int i = 1; i < 2 * R - 1; i++) {
-				c[r][n] += toomB(R, r, i) * m[i][n];
+				c[r][n] = c[r][n] + toomB(R, r, i) * m[i][n];
 			}
 		}
 	}
@@ -665,34 +666,49 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 	}
 	auto pfacs = prime_factorization(N);
 	std::vector<cmplx> y(N);
+	best_x X;
+	X.N = N;
+	X.sig = fft_input_signature(x);
+	X.opts = 0;
 	if (can_fast_cyclic(N)) {
 		y = convolve_tiny(x, h);
-	} else if (can_agarwal(N)) {
-		auto p = prime_factorization(N);
-		auto iter = pfacs.begin();
-		iter++;
-		int N1 = std::pow(pfacs.begin()->first, pfacs.begin()->second);
-		int N2 = N / N1;
-		y = convolve_agarwal(N1, N2, x, h);
-	} else {
-		bool flag = true;
-		for (auto fac : pfacs) {
-			if (fac.first != 2 && fac.first != 3 && fac.first != 5) {
-				flag = false;
-			}
-		}
-		if (!flag) {
+	} else if (pfacs.size() > 1) {
+		if (!can_agarwal(N)) {
 			y = convolve_fft(x, h);
 		} else {
-			if (N % 5 == 0) {
-				y = convolve_toom(5, x, h);
-			} else if (N % 3 == 0) {
-				y = convolve_toom(3, x, h);
-			} else if (N % 2 == 0) {
-				y = convolve_toom(2, x, h);
-			} else {
-				assert(false);
+			static std::map<best_x, int> cache;
+			if (cache.find(X) == cache.end()) {
+				auto p = prime_factorization(N);
+				int best_N1;
+				int best_cnt = 1000000000;
+				for (auto fac : p) {
+					int N1 = std::pow(fac.first, fac.second);
+					if (!can_fast_cyclic(N) && !(N % 2 == 0 || N % 3 == 0 || N % 5 == 0)) {
+						continue;
+					}
+					int N2 = N / N1;
+					int cnt = math_vertex::operation_count(convolve_agarwal(N1, N2, x, h)).total();
+					fprintf(stderr, "N = %i N1 = %i cnt = %i\n", N, N1, cnt);
+					if (cnt < best_cnt) {
+						best_cnt = cnt;
+						best_N1 = N1;
+					}
+				}
+				cache[X] = best_N1;
 			}
+			int N1 = cache[X];
+			int N2 = N / N1;
+			y = convolve_agarwal(N1, N2, x, h);
+		}
+	} else {
+		if (N % 5 == 0) {
+			y = convolve_toom(5, x, h);
+		} else if (N % 3 == 0) {
+			y = convolve_toom(3, x, h);
+		} else if (N % 2 == 0) {
+			y = convolve_toom(2, x, h);
+		} else {
+			y = convolve_fft(x, h);
 		}
 	}
 	for (auto z : y) {

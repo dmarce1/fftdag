@@ -7,7 +7,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 32;
+constexpr int Nmax = 64;
 
 //#define USE_DCT
 
