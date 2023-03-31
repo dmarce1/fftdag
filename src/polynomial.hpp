@@ -1,32 +1,41 @@
 #include "fft.hpp"
 
+#include <map>
+
 bool close2(double, double);
 
 template<class T>
 class polynomial {
-	std::vector<T> a;
+	std::map<int, T> a;
 public:
+	bool zero(int i) const {
+		return a.find(i) == a.end();
+	}
 	T operator[](int i) const {
-		return a[i];
+		auto j = a.find(i);
+		assert(j != a.end());
+		return j->second;
 	}
 	T& operator[](int i) {
 		return a[i];
 	}
 	int degree() const {
-		return a.size() - 1;
-	}
-	polynomial() = default;
-	polynomial(int N) {
-		a.resize(N + 1);
+		return a.rbegin()->first;
 	}
 	std::string to_str() const {
 		std::string str = "";
-		for (int n = degree(); n >= 0; n--) {
-			if (!(close2(a[n].real(), 0.0) && close2(a[n].imag(), 0.0))) {
+		for (auto i = a.rbegin(); i != a.rend(); i++) {
+			int n = i->first;
+			auto b = i->second;
+			if (!close2(std::abs(b), 0.0)) {
 				if (n != degree()) {
 					str += " + ";
 				}
-				str += "(" + std::to_string(a[n].real()) + " + i" + std::to_string(a[n].imag()) + ")";
+				str += "(" + std::to_string(b.real());
+				if (!close2(b.imag(), 0.0)) {
+					str += " + i" + std::to_string(b.imag());
+				}
+				str += ")";
 				if (n > 0) {
 					str += " z";
 					if (n > 1) {
@@ -38,24 +47,36 @@ public:
 		return str;
 	}
 	polynomial operator+(polynomial B) const {
-		auto C = *this;
-		int deg = std::max(degree(), B.degree());
-		B.a.resize(deg + 1, T(0));
-		C.a.resize(deg + 1, T(0));
-		for (int n = 0; n <= deg; n++) {
-			C[n] += B[n];
+		auto A = *this;
+		for (auto i = A.begin(); i != A.end(); i++) {
+			auto j = B.find(i->first);
+			if (j != B.end()) {
+				i->second += j->second;
+			}
 		}
-		return C;
+		for (auto i = B.begin(); i != B.end(); i++) {
+			auto j = A.find(i->first);
+			if (j == A.end()) {
+				A[i->first] = i->second;
+			}
+		}
+		return A;
 	}
 	polynomial operator-(polynomial B) const {
-		auto C = *this;
-		int deg = std::max(degree(), B.degree());
-		B.resize(deg + 1, T(0));
-		C.resize(deg + 1, T(0));
-		for (int n = 0; n <= deg; n++) {
-			C[n] -= B[n];
+		auto A = *this;
+		for (auto i = A.begin(); i != A.end(); i++) {
+			auto j = B.find(i->first);
+			if (j != B.end()) {
+				i->second -= j->second;
+			}
 		}
-		return C;
+		for (auto i = B.begin(); i != B.end(); i++) {
+			auto j = A.find(i->first);
+			if (j == A.end()) {
+				A[i->first] = -i->second;
+			}
+		}
+		return A;
 	}
 	polynomial& operator+=(const polynomial& B) {
 		*this = *this + B;
@@ -75,17 +96,17 @@ public:
 		*this = *this * b;
 		return *this;
 	}
-	void resize(int deg) {
-		a.resize(deg + 1, T(0));
-	}
 	polynomial operator*(const polynomial& B) const {
 		auto A = *this;
 		polynomial C;
 		int deg = A.degree() + B.degree();
-		C.resize(deg);
-		for (int n = 0; n <= A.degree(); n++) {
-			for (int m = 0; m <= B.degree(); m++) {
-				C[n + m] += A[n] * B[m];
+		for (auto i = A.a.begin(); i != A.a.end(); i++) {
+			for (auto j = B.a.begin(); j != B.a.end(); j++) {
+				int nm = i->first + j->first;
+				if (C.a.find(nm) == C.a.end()) {
+					C[nm] = 0.0;
+				}
+				C[nm] += i->second * j->second;
 			}
 		}
 		return C;
@@ -95,27 +116,41 @@ public:
 		auto Q = *this;
 		int deg = Q.degree();
 		for (int d = deg; d >= D.degree(); d--) {
-			const T a = Q[d] * (1.0 / D[D.degree()]);
-			for (int n = 0; D.degree() - n >= 0; n++) {
-				Q[d - n] -= a * D[D.degree() - n];
+			if (!Q.zero(d)) {
+				const T a = Q[d] * (1.0 / D[D.degree()]);
+				Q.a.erase(d);
+				for (int n = 1; D.degree() - n >= 0; n++) {
+					if (!D.zero(D.degree() - n)) {
+						if (Q.zero(d - n)) {
+							Q[d - n] = 0.0;
+						}
+						Q[d - n] -= a * D[D.degree() - n];
+					}
+				}
 			}
 		}
-		Q.resize(deg - D.degree());
 		return Q;
 	}
 	template<class U>
 	polynomial operator/(polynomial<U> D) const {
 		auto Q = *this;
-		int deg = Q.degree();
-		polynomial P(deg);
-		for (int d = deg; d >= D.degree(); d--) {
-			int dd = D.degree();
-			P[d - dd] = Q[d] * (1.0 / D[dd]);
-			for (int n = 0; dd - n >= 0; n++) {
-				Q[d - n] -= P[d - dd] * D[dd - n];
+		int qd = Q.degree();
+		int dd = D.degree();
+		polynomial P;
+		for (int d = qd; d >= D.degree(); d--) {
+			if (!Q.zero(d)) {
+				P[d - dd] = Q[d] * (1.0 / D[dd]);
+				Q.a.erase(d);
+				for (int n = 1; dd - n >= 0; n++) {
+					if (!D.zero(D.degree() - n)) {
+						if (Q.zero(d - n)) {
+							Q[d - n] = 0.0;
+						}
+						Q[d - n] -= P[d - dd] * D[dd - n];
+					}
+				}
 			}
 		}
-		P.resize(deg - D.degree());
 		return P;
 	}
 }

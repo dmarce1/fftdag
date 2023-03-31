@@ -19,24 +19,24 @@ double rand1() {
 
 int main(int argc, char **argv) {
 	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
-/*	polynomial<std::complex<double>> A(5);
-	polynomial<std::complex<double>> B(3);
-	A[0] = -1.0;
-	A[1] = 1.0;
-	A[2] = 2.0;
-	A[3] = 3.0;
-	A[4] = std::complex<double>(0.0,4.0);
-	A[5] = 5.0;
-	B[0] = std::complex<double>(0.0,1.0);
-	B[1] = -4.0;
-	B[2] = 2.0;
-	B[3] = std::complex<double>(0.0,4.0);
-	auto C = A * B;
-	auto D = C / A;
-	printf( "%s | %s\n", D.to_str().c_str(), B.to_str().c_str());
+	/*	polynomial<std::complex<double>> A(5);
+	 polynomial<std::complex<double>> B(3);
+	 A[0] = -1.0;
+	 A[1] = 1.0;
+	 A[2] = 2.0;
+	 A[3] = 3.0;
+	 A[4] = std::complex<double>(0.0,4.0);
+	 A[5] = 5.0;
+	 B[0] = std::complex<double>(0.0,1.0);
+	 B[1] = -4.0;
+	 B[2] = 2.0;
+	 B[3] = std::complex<double>(0.0,4.0);
+	 auto C = A * B;
+	 auto D = C / A;
+	 printf( "%s | %s\n", D.to_str().c_str(), B.to_str().c_str());
 
-	abort();*/
-	constexpr int N = 32;
+	 abort();*/
+	constexpr int N = 8;
 	std::vector<std::complex<double>> X(N);
 	for (int n = 0; n < N; n++) {
 		X[n].real(rand1());
@@ -47,9 +47,13 @@ int main(int argc, char **argv) {
 	fftw(Y);
 	X = fft_bruun(X, N);
 	printf("\n");
+	double e = 0.0;
 	for (int n = 0; n < N; n++) {
-		printf("%i %e %e %e %e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag());
+		auto err = std::abs(X[n] - Y[n]);
+		e += err;
+		printf("%3i %10.3e %10.3e %10.3e %10.3e |  %10.3e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
 	}
+	printf("%e\n", e);
 	abort();
 	int cnt1 = 0;
 	int cnt2 = 0;
