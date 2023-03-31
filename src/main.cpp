@@ -11,34 +11,46 @@ constexpr int Nmin = 2;
 constexpr int Nmax = 32;
 
 //#define USE_DCT
+double rand1() {
+	return (rand() + 0.5) / RAND_MAX;
+}
+
+#include <fenv.h>
 
 int main(int argc, char **argv) {
-	polynomial<double> A, B;
-	A.resize(3);
-	B.resize(2);
-	A[3] = 1.0;
-	A[2] = 1.0;
-	A[1] = -2.0;
+	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
+/*	polynomial<std::complex<double>> A(5);
+	polynomial<std::complex<double>> B(3);
 	A[0] = -1.0;
-	B[2] = 1.0;
-	B[1] = 1.0;
-	B[0] = -3.0;
-	auto C = (A * B + B) % A;
-	printf( "%s\n", A.to_str().c_str());
-	printf( "%s\n", B.to_str().c_str());
-	printf( "%s\n", C.to_str().c_str());
-	abort();
-	int pct = 0;
-//	srand(time(NULL));
-//	int N = 29;
-//	auto inputs = math_vertex::new_inputs(2 * N);
-//	auto outputs = fft(inputs, N, 0);
-//	math_pebble_game game;
-//	game(inputs, outputs);
-//	int score = game.search();
-//	fprintf(stderr, "score = %i\n", score);
+	A[1] = 1.0;
+	A[2] = 2.0;
+	A[3] = 3.0;
+	A[4] = std::complex<double>(0.0,4.0);
+	A[5] = 5.0;
+	B[0] = std::complex<double>(0.0,1.0);
+	B[1] = -4.0;
+	B[2] = 2.0;
+	B[3] = std::complex<double>(0.0,4.0);
+	auto C = A * B;
+	auto D = C / A;
+	printf( "%s | %s\n", D.to_str().c_str(), B.to_str().c_str());
 
-//abort();
+	abort();*/
+	constexpr int N = 32;
+	std::vector<std::complex<double>> X(N);
+	for (int n = 0; n < N; n++) {
+		X[n].real(rand1());
+		X[n].imag(rand1());
+	}
+	auto Y = X;
+	auto X0 = X;
+	fftw(Y);
+	X = fft_bruun(X, N);
+	printf("\n");
+	for (int n = 0; n < N; n++) {
+		printf("%i %e %e %e %e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag());
+	}
+	abort();
 	int cnt1 = 0;
 	int cnt2 = 0;
 	fprintf( stderr, "------------------------------CONVOLVE-----------------------------\n");
@@ -66,7 +78,7 @@ int main(int argc, char **argv) {
 		if (cnt.total() == 0 || cnt.total() > cnt3.total()) {
 			Y = std::move(Z);
 		}
-		if( cnt.total() == 0 ) {
+		if (cnt.total() == 0) {
 			cnt.add = cnt.mul = cnt.neg = 0;
 		}
 		auto tmp = math_vertex::execute_all(std::move(x), y);

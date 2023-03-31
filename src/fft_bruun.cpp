@@ -4,22 +4,41 @@
 using complex_polynomial = polynomial<std::complex<double>>;
 
 std::vector<std::complex<double>> fft_bruun(const complex_polynomial& X, const complex_polynomial& D, const std::vector<complex_polynomial>& W, int N) {
-	printf("D = %s\n", D.to_str().c_str());
+//	printf("D = %s\n", D.to_str().c_str());
 	if (N == 1) {
 		return std::vector<std::complex<double>>(1, X[0]);
 	} else {
 		std::vector<std::complex<double>> Y;
-		complex_polynomial D1 = D;
-		complex_polynomial D2 = D;
+		complex_polynomial D1(N / 2);
+		complex_polynomial D2(N / 2);
 		std::vector<complex_polynomial> W1;
 		std::vector<complex_polynomial> W2;
-		for (int n = 0; n < N / 2; n++) {
-			D2 = D2 / W[2 * n];
-			D1 = D1 / W[2 * n + 1];
-			W1.push_back(W[2 * n]);
-			W2.push_back(W[2 * n + 1]);
+		if (N > 2) {
+			D1[N / 2] = D2[N / 2] = 1.0;
+			if (D[0].real() < 0.0) {
+				D1[0] = -1.0;
+				D2[0] = 1.0;
+			} else {
+				D1[0] = D2[0] = 1.0;
+				D1[N / 4] = sqrt(2.0 - D[N / 2]);
+				D2[N / 4] = -D1[N / 4];
+			}
+		} else {
+			D1 = D / W[1];
+			D2 = D / W[0];
 		}
-		printf("D1 = %s  D2 = %s\n", D1.to_str().c_str(), D2.to_str().c_str());
+		for (int n = 0; n < N; n++) {
+			auto w = W[n];
+			if (close2(std::abs((D1 % w)[0]), 0.0)) {
+				W1.push_back(w);
+				printf("e ");
+			} else {
+				W2.push_back(w);
+				printf("o ");
+			}
+		}
+		printf("\n");
+	//	printf("D1 = %s  D2 = %s\n", D1.to_str().c_str(), D2.to_str().c_str());
 		complex_polynomial X1 = X % D1;
 		complex_polynomial X2 = X % D2;
 		auto Y1 = fft_bruun(X1, D1, W1, N / 2);

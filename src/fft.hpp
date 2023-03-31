@@ -17,6 +17,8 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts );
 std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_cooley_tukey(int N1, int N2, std::vector<cmplx> xin, int opts);
+std::vector<std::complex<double>> fft_bruun(std::vector<std::complex<double>> xin, int N);
+
 void fft_reset();
 void print_fft_bests();
 bool can_agarwal(int N);

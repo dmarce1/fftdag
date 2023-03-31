@@ -9,6 +9,43 @@ int calc_padding(int N) {
 	return M;
 }
 
+std::vector<cmplx> fft_raders2(std::vector<cmplx> xin, int N, bool padded, int opts) {
+	std::vector<cmplx> xout(N);
+	const auto odd_index = [N]( int n1, int n2 ) {
+		int i = mod_pow(3, n2, N);
+		if( n1 > 0 ) {
+			i = N - i;
+		}
+		return i;
+	};
+	auto prime_fac = prime_factorization(N);
+	constexpr int P = 2;
+	const int c = prime_fac.begin()->second;
+	std::vector<std::vector<std::complex<double>>> tw(2, std::vector<std::complex<double>>(N / 4));
+	std::vector<cmplx> x0(N / 2);
+	std::vector<std::vector<cmplx>> x1(2, std::vector<cmplx>(N / 4));
+	std::vector<std::vector<cmplx>> x2(N / 4, std::vector<cmplx>(2));
+	for (int k1 = 0; k1 < 2; k1++) {
+		for (int k2 = 0; k2 < N / 4; k2++) {
+			int k = odd_index(k1, k2);
+			tw[k1][k2] = std::polar(1.0, -2.0 * M_PI * k / N);
+		}
+	}
+	for (int n = 0; n < N / 2; n++) {
+		x0[n] = xin[2 * n];
+	}
+	for (int n1 = 0; n1 < 2; n1++) {
+		for (int n2 = 0; n2 < N / 4; n2++) {
+			int n = odd_index(n1, n2);
+			x1[n1][n2] = xin[n];
+		}
+	}
+	x0 = fft(x0, N / 2, opts);
+	x1 = convolve(x1, tw, opts);
+
+	return xout;
+}
+
 std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int opts) {
 	std::vector<cmplx> xout(N, cmplx( { 0.0, 0.0 }));
 	auto prime_fac = prime_factorization(N);

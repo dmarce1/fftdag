@@ -620,7 +620,7 @@ std::vector<cmplx> convolve_dispatch(std::vector<cmplx> X, std::vector<std::comp
 	return std::vector<cmplx>();
 }
 
-std::vector<std::vector<cmplx>> convolve_dispatch(std::vector<std::vector<cmplx>> X, std::vector<std::vector<std::complex<double>>> H) {
+std::vector<std::vector<cmplx>> convolve_dispatch(std::vector<std::vector<cmplx>> X, std::vector<std::vector<std::complex<double>>>H) {
 	int N = X.size();
 	if (can_fast_cyclic(N)) {
 		return convolve_tiny(X, H);
@@ -634,6 +634,10 @@ std::vector<std::vector<cmplx>> convolve_dispatch(std::vector<std::vector<cmplx>
 		assert(false);
 	}
 	return std::vector<std::vector<cmplx>>();
+}
+
+std::vector<std::vector<cmplx>> convolve(std::vector<std::vector<cmplx>> x, std::vector<std::vector<std::complex<double>>>h, int opts) {
+	return convolve_dispatch(x, h);
 }
 
 template<class T, class V>
