@@ -23,6 +23,7 @@ std::vector<std::complex<double>> chirp_z_filter(int N);
 std::vector<std::vector<int>> nchoosek(int n, int k);
 bool is_prime(int n);
 int greatest_prime_factor(int N);
+int least_prime_factor(int N);
 std::map<int, int> prime_factorization(int N);
 int mod_pow(int a, int b, int m);
 int mod_inv(int a, int m);

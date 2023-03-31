@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 	 printf( "%s | %s\n", D.to_str().c_str(), B.to_str().c_str());
 
 	 abort();*/
-	constexpr int N = 8;
+	constexpr int N = 64;
 	std::vector<std::complex<double>> X(N);
 	for (int n = 0; n < N; n++) {
 		X[n].real(rand1());

@@ -96,6 +96,14 @@ public:
 		*this = *this * b;
 		return *this;
 	}
+	polynomial& operator*=(const polynomial & B) {
+		*this = *this * B;
+		return *this;
+	}
+	polynomial& operator/=(const polynomial & B) {
+		*this = *this / B;
+		return *this;
+	}
 	polynomial operator*(const polynomial& B) const {
 		auto A = *this;
 		polynomial C;
@@ -117,7 +125,7 @@ public:
 		int deg = Q.degree();
 		for (int d = deg; d >= D.degree(); d--) {
 			if (!Q.zero(d)) {
-				const T a = Q[d] * (1.0 / D[D.degree()]);
+				const T a = Q[d] * (1.0l / D[D.degree()]);
 				Q.a.erase(d);
 				for (int n = 1; D.degree() - n >= 0; n++) {
 					if (!D.zero(D.degree() - n)) {
@@ -125,6 +133,9 @@ public:
 							Q[d - n] = 0.0;
 						}
 						Q[d - n] -= a * D[D.degree() - n];
+						if (close2(std::abs(Q[d - n]), 0.0)) {
+							Q.a.erase(d - n);
+						}
 					}
 				}
 			}
@@ -139,7 +150,7 @@ public:
 		polynomial P;
 		for (int d = qd; d >= D.degree(); d--) {
 			if (!Q.zero(d)) {
-				P[d - dd] = Q[d] * (1.0 / D[dd]);
+				P[d - dd] = Q[d] * (1.0l / D[dd]);
 				Q.a.erase(d);
 				for (int n = 1; dd - n >= 0; n++) {
 					if (!D.zero(D.degree() - n)) {

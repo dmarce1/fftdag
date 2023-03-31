@@ -253,6 +253,22 @@ int greatest_prime_factor(int N) {
 	return i->second;
 }
 
+int least_prime_factor(int N) {
+	static thread_local std::unordered_map<int, int> values;
+	auto i = values.find(N);
+	if (i == values.end()) {
+		int v;
+		for (int n = N; n >= 2; n--) {
+			if (N % n == 0 && is_prime(n)) {
+				v = n;
+			}
+		}
+		values[N] = v;
+		i = values.find(N);
+	}
+	return i->second;
+}
+
 std::map<int, int> prime_factorization(int N) {
 	std::map<int, int> map;
 	while (N != 1) {
