@@ -11,6 +11,14 @@ public:
 	bool zero(int i) const {
 		return a.find(i) == a.end();
 	}
+	bool zero() const {
+		for (auto i = a.begin(); i != a.end(); i++) {
+			if (!close2(std::abs(i->second), 0.0)) {
+				return false;
+			}
+		}
+		return true;
+	}
 	T operator[](int i) const {
 		auto j = a.find(i);
 		assert(j != a.end());
@@ -19,10 +27,17 @@ public:
 	T& operator[](int i) {
 		return a[i];
 	}
-	int degree() const {
-		return a.rbegin()->first;
+	int degree() {
+		while (a.size() && close2(std::abs(a.rbegin()->second), 0.0)) {
+			a.erase(a.rbegin()->first);
+		}
+		if (a.size()) {
+			return a.rbegin()->first;
+		} else {
+			return -1;
+		}
 	}
-	std::string to_str() const {
+	std::string to_str() {
 		std::string str = "";
 		for (auto i = a.rbegin(); i != a.rend(); i++) {
 			int n = i->first;
@@ -48,15 +63,15 @@ public:
 	}
 	polynomial operator+(polynomial B) const {
 		auto A = *this;
-		for (auto i = A.begin(); i != A.end(); i++) {
-			auto j = B.find(i->first);
-			if (j != B.end()) {
+		for (auto i = A.a.begin(); i != A.a.end(); i++) {
+			auto j = B.a.find(i->first);
+			if (j != B.a.end()) {
 				i->second += j->second;
 			}
 		}
-		for (auto i = B.begin(); i != B.end(); i++) {
-			auto j = A.find(i->first);
-			if (j == A.end()) {
+		for (auto i = B.a.begin(); i != B.a.end(); i++) {
+			auto j = A.a.find(i->first);
+			if (j == A.a.end()) {
 				A[i->first] = i->second;
 			}
 		}
@@ -64,15 +79,15 @@ public:
 	}
 	polynomial operator-(polynomial B) const {
 		auto A = *this;
-		for (auto i = A.begin(); i != A.end(); i++) {
-			auto j = B.find(i->first);
-			if (j != B.end()) {
+		for (auto i = A.a.begin(); i != A.a.end(); i++) {
+			auto j = B.a.find(i->first);
+			if (j != B.a.end()) {
 				i->second -= j->second;
 			}
 		}
-		for (auto i = B.begin(); i != B.end(); i++) {
-			auto j = A.find(i->first);
-			if (j == A.end()) {
+		for (auto i = B.a.begin(); i != B.a.end(); i++) {
+			auto j = A.a.find(i->first);
+			if (j == A.a.end()) {
 				A[i->first] = -i->second;
 			}
 		}
@@ -104,65 +119,67 @@ public:
 		*this = *this / B;
 		return *this;
 	}
-	polynomial operator*(const polynomial& B) const {
+
+	template<class U>
+	friend class polynomial;
+
+	template<class U>
+	polynomial operator*(const polynomial<U>& B) const {
 		auto A = *this;
 		polynomial C;
-		int deg = A.degree() + B.degree();
 		for (auto i = A.a.begin(); i != A.a.end(); i++) {
 			for (auto j = B.a.begin(); j != B.a.end(); j++) {
 				int nm = i->first + j->first;
 				if (C.a.find(nm) == C.a.end()) {
-					C[nm] = 0.0;
+					C[nm] = T(0);
 				}
 				C[nm] += i->second * j->second;
 			}
 		}
 		return C;
 	}
-	template<class U>
-	polynomial operator%(polynomial<U> D) const {
-		auto Q = *this;
-		int deg = Q.degree();
-		for (int d = deg; d >= D.degree(); d--) {
-			if (!Q.zero(d)) {
-				const T a = Q[d] * (1.0l / D[D.degree()]);
-				Q.a.erase(d);
-				for (int n = 1; D.degree() - n >= 0; n++) {
-					if (!D.zero(D.degree() - n)) {
-						if (Q.zero(d - n)) {
-							Q[d - n] = 0.0;
-						}
-						Q[d - n] -= a * D[D.degree() - n];
-						if (close2(std::abs(Q[d - n]), 0.0)) {
-							Q.a.erase(d - n);
-						}
-					}
-				}
-			}
+	T leading() {
+		while (close2(std::abs(a.rbegin()->second), 0.0)) {
+			a.erase(a.rbegin()->first);
 		}
-		return Q;
+		return a.rbegin()->second;
 	}
 	template<class U>
-	polynomial operator/(polynomial<U> D) const {
-		auto Q = *this;
-		int qd = Q.degree();
-		int dd = D.degree();
-		polynomial P;
-		for (int d = qd; d >= D.degree(); d--) {
-			if (!Q.zero(d)) {
-				P[d - dd] = Q[d] * (1.0l / D[dd]);
-				Q.a.erase(d);
-				for (int n = 1; dd - n >= 0; n++) {
-					if (!D.zero(D.degree() - n)) {
-						if (Q.zero(d - n)) {
-							Q[d - n] = 0.0;
-						}
-						Q[d - n] -= P[d - dd] * D[dd - n];
-					}
-				}
-			}
+	polynomial operator%(polynomial<U> b) const {
+		auto a = *this;
+		polynomial q;
+		polynomial r = a;
+		int d = b.degree();
+		U c = b.leading();
+		while (r.degree() >= d) {
+			polynomial s;
+			s[r.degree() - d] = r.leading() * (U(1) / c);
+			q += s;
+			r = r - s * b;
+			r.a.erase(r.a.rbegin()->first);
 		}
-		return P;
+		return r;
+	}
+	template<class U>
+	polynomial operator/(polynomial<U> b) const {
+		auto a = *this;
+		polynomial q;
+		polynomial r = a;
+		int d = b.degree();
+		U c = b.leading();
+		if (r.degree() <= d) {
+			printf("? %e\n", b.leading());
+		} else {
+			printf("!\n");
+		}
+		while (r.degree() >= d) {
+			polynomial s;
+			s[r.degree() - d] = r.leading() * (U(1) / c);
+			q += s;
+			r = r - s * b;
+			r.a.erase(r.a.rbegin()->first);
+		}
+		return q;
 	}
 }
 ;

@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <fenv.h>
 
+#define USE_DCT
+
 class timer {
 	std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
 	double time;
@@ -599,7 +601,7 @@ void test() {
 	tm3.reset();
 	tm4.reset();
 	printf("\nCONVOLUTION\n");
-	for (int N = FFT_NMIN; N <= FFT_NMAX; N += 1) {
+	for (int N = FFT_NMIN; N <= std::min(32,FFT_NMAX); N += 1) {
 		timer tm1, tm2;
 		double err;
 		double max;

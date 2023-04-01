@@ -746,8 +746,8 @@ math_vertex math_vertex::optimize() {
 		break;
 	case NEG:
 		if (a.is_neg()) {
-			c = a.get_neg();
-			flag = true;
+	//		c = a.get_neg();
+	//		flag = true;
 		}
 		break;
 	default:

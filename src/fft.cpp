@@ -6,6 +6,7 @@
 
 #define RADIX2 0
 #define RADIX4 1
+#define BRUUN 2
 #define SINGLETON 3
 #define RADERS 4
 #define RADERS_PADDED 5
@@ -234,6 +235,9 @@ void print_fft_bests() {
 		case RADIX4:
 			method += "split4";
 			break;
+		case BRUUN:
+			method += "Bruun";
+			break;
 		case SINGLETON:
 			method += "Singleton";
 			break;
@@ -255,7 +259,7 @@ void print_fft_bests() {
 		default:
 			assert(false);
 		}
-		if (i->second.method == RADERS) {
+		if (i->second.method == BRUUN) {
 			fprintf(stderr, "%32s | %16s | %i x %i \n", opts.c_str(), method.c_str(), i->second.R, i->first.N / i->second.R);
 			for (int n = 0; n < i->first.sig.size(); n++) {
 				fprintf(stderr, "%i ", i->first.sig[n]);
@@ -304,11 +308,25 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 		int huge = std::numeric_limits<int>::max();
 		std::vector<best_y> tries;
 		best_y y;
+		/*if( greatest_prime_factor(N) <= 5 && (N % 4 == 0) ) {
+			y.R = N;
+			y.method = BRUUN;
+			y.cnt = op_count(fft_bruun(xin, N, opts));
+			y.cnt = 1;
+			tries.push_back(y);
+			printf( "%i %i\n", N, y.cnt);
+		}*/
 		if (N % 2 == 0) {
 			y.R = 2;
 			y.method = RADIX2;
 			y.cnt = op_count(fft_radix2(xin, N, opts));
 			tries.push_back(y);
+			if (N > 2) {
+				y.R = 2;
+				y.method = RADIX4;
+				y.cnt = op_count(fft_radix2(xin, N, opts));
+				tries.push_back(y);
+			}
 			if (1 << ilogb(N) == N) {
 				y.R = 4;
 				y.method = TANGENT;
@@ -372,6 +390,9 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 		break;
 	case RADIX4:
 		xout = fft_radix4(xin, N, opts);
+		break;
+	case BRUUN:
+		xout = fft_bruun(xin, N, opts);
 		break;
 	case SINGLETON:
 		xout = fft_singleton(xin, N, opts);

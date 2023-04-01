@@ -8,57 +8,77 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 32;
+constexpr int Nmax = 256;
 
-//#define USE_DCT
+#define USE_DCT
 double rand1() {
 	return (rand() + 0.5) / RAND_MAX;
 }
 
 #include <fenv.h>
 
+int inverse(int a, int n) {
+	int t = 0;
+	int newt = 1;
+	int r = n;
+	int newr = a;
+	while (newr != 0) {
+		int quotient = r / newr;
+		int t0 = newt;
+		int r0 = newr;
+		newt = t - quotient * newt;
+		newr = r - quotient * newr;
+		t = t0;
+		r = r0;
+		if (t < 0) {
+			t += n;
+		}
+		printf("%i\n", t);
+	}
+	return t;
+}
+
+int gcd(int a, int b) {
+	while (a != 0 && b != 0) {
+		if (a > b) {
+			a = a - b;
+		} else {
+			b = b - a;
+		}
+	}
+	return std::max(a, b);
+}
+
 int main(int argc, char **argv) {
 	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
-	/*	polynomial<std::complex<double>> A(5);
-	 polynomial<std::complex<double>> B(3);
-	 A[0] = -1.0;
-	 A[1] = 1.0;
-	 A[2] = 2.0;
-	 A[3] = 3.0;
-	 A[4] = std::complex<double>(0.0,4.0);
-	 A[5] = 5.0;
-	 B[0] = std::complex<double>(0.0,1.0);
-	 B[1] = -4.0;
-	 B[2] = 2.0;
-	 B[3] = std::complex<double>(0.0,4.0);
-	 auto C = A * B;
-	 auto D = C / A;
-	 printf( "%s | %s\n", D.to_str().c_str(), B.to_str().c_str());
-
-	 abort();*/
-	constexpr int N = 64;
+//	inverse(11, 34);
+//	abort();
+	constexpr int N = 6;
 	std::vector<std::complex<double>> X(N);
+	std::vector<std::complex<double>> H(N);
 	for (int n = 0; n < N; n++) {
 		X[n].real(rand1());
 		X[n].imag(rand1());
+		H[n].real(rand1());
+		H[n].imag(rand1());
 	}
-	auto Y = X;
-	auto X0 = X;
-	fftw(Y);
-	X = fft_bruun(X, N);
-	printf("\n");
-	double e = 0.0;
-	for (int n = 0; n < N; n++) {
-		auto err = std::abs(X[n] - Y[n]);
-		e += err;
-		printf("%3i %10.3e %10.3e %10.3e %10.3e |  %10.3e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
-	}
-	printf("%e\n", e);
+	auto Y = winograd_convolve(X, H);
+	/*auto X0 = X;
+	 fftw(Y);
+	 X = fft_bruun(X, N);
+	 printf("\n");
+	 double e = 0.0;
+	 for (int n = 0; n < N; n++) {
+	 auto err = std::abs(X[n] - Y[n]);
+	 e += err;
+	 printf("%3i %10.3e %10.3e %10.3e %10.3e |  %10.3e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
+	 }
+	 printf("%e\n", e);*/
 	abort();
 	int cnt1 = 0;
 	int cnt2 = 0;
 	fprintf( stderr, "------------------------------CONVOLVE-----------------------------\n");
-	for (int N = Nmin; N <= Nmax; N++) {
+	for (int N = Nmin; N <= std::min(Nmax, 32); N++) {
 		std::vector<std::complex<double>> h(N);
 		srand(42);
 		for (int n = 0; n < N; n++) {
@@ -375,7 +395,6 @@ int main(int argc, char **argv) {
 	fprintf(fp, "\t(*fft_real_inv_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
 #ifdef USE_DCT
-	fprintf(fp, "\n};\n\n");
 	fprintf(fp, "fft_type fft_dct1_pointer[FFT_NMAX + 1] = {");
 	for (int N = 0; N <= Nmax; N++) {
 		if (N % 8 == 0) {
