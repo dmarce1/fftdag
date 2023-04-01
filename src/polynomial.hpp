@@ -167,11 +167,6 @@ public:
 		polynomial r = a;
 		int d = b.degree();
 		U c = b.leading();
-		if (r.degree() <= d) {
-			printf("? %e\n", b.leading());
-		} else {
-			printf("!\n");
-		}
 		while (r.degree() >= d) {
 			polynomial s;
 			s[r.degree() - d] = r.leading() * (U(1) / c);

@@ -53,16 +53,25 @@ int main(int argc, char **argv) {
 	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 //	inverse(11, 34);
 //	abort();
-	constexpr int N = 6;
-	std::vector<std::complex<double>> X(N);
-	std::vector<std::complex<double>> H(N);
+	constexpr int N = 50;
+	std::vector<std::complex<double>> X(N, 0.0);
+	std::vector<std::complex<double>> H(N, 0.0);
 	for (int n = 0; n < N; n++) {
 		X[n].real(rand1());
 		X[n].imag(rand1());
 		H[n].real(rand1());
 		H[n].imag(rand1());
 	}
+	H[0] = X[0] = 1.0;
 	auto Y = winograd_convolve(X, H);
+	decltype(Y) Z(N);
+	for (int n = 0; n < N; n++) {
+		Z[n] = 0.0;
+		for (int m = 0; m < N; m++) {
+			Z[n] += X[m] * H[mod(n - m, N)];
+		}
+		printf("%e %e | %e %e\n", Y[n].real(), Y[n].imag(), Z[n].real(), Z[n].imag());
+	}
 	/*auto X0 = X;
 	 fftw(Y);
 	 X = fft_bruun(X, N);
