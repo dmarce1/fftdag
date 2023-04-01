@@ -8,7 +8,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 256;
+constexpr int Nmax = 32;
 
 #define USE_DCT
 double rand1() {
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 //	inverse(11, 34);
 //	abort();
-	constexpr int N = 50;
+	constexpr int N = 4;
 	std::vector<std::complex<double>> X(N, 0.0);
 	std::vector<std::complex<double>> H(N, 0.0);
 	for (int n = 0; n < N; n++) {
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 		H[n].real(rand1());
 		H[n].imag(rand1());
 	}
-	H[0] = X[0] = 1.0;
+/*	H[0] = X[0] = 1.0;
 	auto Y = winograd_convolve(X, H);
 	decltype(Y) Z(N);
 	for (int n = 0; n < N; n++) {
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
 			Z[n] += X[m] * H[mod(n - m, N)];
 		}
 		printf("%e %e | %e %e\n", Y[n].real(), Y[n].imag(), Z[n].real(), Z[n].imag());
-	}
+	}*/
 	/*auto X0 = X;
 	 fftw(Y);
 	 X = fft_bruun(X, N);
@@ -83,7 +83,6 @@ int main(int argc, char **argv) {
 	 printf("%3i %10.3e %10.3e %10.3e %10.3e |  %10.3e\n", n, X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
 	 }
 	 printf("%e\n", e);*/
-	abort();
 	int cnt1 = 0;
 	int cnt2 = 0;
 	fprintf( stderr, "------------------------------CONVOLVE-----------------------------\n");

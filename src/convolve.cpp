@@ -606,34 +606,44 @@ std::vector<T> convolve_tiny(std::vector<T> x, std::vector<V> h);
 
 std::vector<cmplx> convolve_dispatch(std::vector<cmplx> X, std::vector<std::complex<double>> H) {
 	int N = X.size();
+	std::vector<cmplx> y;
 	if (can_fast_cyclic(N)) {
-		return convolve_tiny(X, H);
+		y = convolve_tiny(X, H);
 	} else if (N % 2 == 0) {
-		return convolve_toom(2, X, H);
+		y = convolve_toom(2, X, H);
 	} else if (N % 3 == 0) {
-		return convolve_toom(3, X, H);
+		y = convolve_toom(3, X, H);
 	} else if (N % 5 == 0) {
-		return convolve_toom(5, X, H);
+		y = convolve_toom(5, X, H);
 	} else {
-		return convolve_fft(X, H);
+		y = convolve_fft(X, H);
 	}
-	return std::vector<cmplx>();
+	for (auto z : y) {
+		z.set_goal();
+	}
+	return y;
 }
 
 std::vector<std::vector<cmplx>> convolve_dispatch(std::vector<std::vector<cmplx>> X, std::vector<std::vector<std::complex<double>>>H) {
 	int N = X.size();
+	std::vector<std::vector<cmplx>> y;
 	if (can_fast_cyclic(N)) {
-		return convolve_tiny(X, H);
+		y = convolve_tiny(X, H);
 	} else if (N % 2 == 0) {
-		return convolve_toom(2, X, H);
+		y = convolve_toom(2, X, H);
 	} else if (N % 3 == 0) {
-		return convolve_toom(3, X, H);
+		y = convolve_toom(3, X, H);
 	} else if (N % 5 == 0) {
-		return convolve_toom(5, X, H);
+		y = convolve_toom(5, X, H);
 	} else {
 		assert(false);
 	}
-	return std::vector<std::vector<cmplx>>();
+	for (auto z : y) {
+		for( auto q : z ) {
+			q.set_goal();
+		}
+	}
+	return y;
 }
 
 std::vector<std::vector<cmplx>> convolve(std::vector<std::vector<cmplx>> x, std::vector<std::vector<std::complex<double>>>h, int opts) {

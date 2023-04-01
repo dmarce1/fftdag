@@ -116,13 +116,13 @@ public:
 	math_vertex(dag_vertex<properties> && v);
 	math_vertex(double constant);
 	math_vertex& operator=(const math_vertex& other) {
-		if( get_unique_id() != other.get_unique_id()) {
-				v = other.v;
+		if (get_unique_id() != other.get_unique_id()) {
+			v = other.v;
 		}
 		return *this;
 	}
-	math_vertex& operator=( math_vertex&& other) {
-		if( get_unique_id() != other.get_unique_id()) {
+	math_vertex& operator=(math_vertex&& other) {
+		if (get_unique_id() != other.get_unique_id()) {
 			v = std::move(other.v);
 		}
 		return *this;
@@ -270,6 +270,17 @@ inline bool is_arithmetic(operation_t op) {
 	default:
 		return false;
 	}
+}
+
+namespace std {
+inline double abs(cmplx z) {
+	if (z.x.get_op() == CON && z.y.get_op() == CON) {
+		double x = z.x.get_value();
+		double y = z.y.get_value();
+		return sqrt(x * x + y * y);
+	}
+	return 1.0;
+}
 }
 
 #endif /* MATH_HPP_ */

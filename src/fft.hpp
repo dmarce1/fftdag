@@ -19,7 +19,6 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_cooley_tukey(int N1, int N2, std::vector<cmplx> xin, int opts);
 std::vector<std::complex<double>> fft_bruun(std::vector<std::complex<double>> xin, int N);
 std::vector<cmplx> fft_bruun(std::vector<cmplx> xin, int N, int opts);
-std::vector<std::complex<double>> winograd_convolve(const std::vector<std::complex<double>>& X, const std::vector<std::complex<double>>& H);
 
 void fft_reset();
 void print_fft_bests();
