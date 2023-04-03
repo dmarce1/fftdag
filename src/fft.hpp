@@ -13,17 +13,20 @@
 #define FFT_DST3 256
 #define FFT_DST4 512
 
-std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts );
+std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts);
 std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts);
-std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts);
+std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts, bool = false);
 std::vector<cmplx> fft_cooley_tukey(int N1, int N2, std::vector<cmplx> xin, int opts);
 std::vector<std::complex<double>> fft_bruun(std::vector<std::complex<double>> xin, int N);
 std::vector<cmplx> fft_bruun(std::vector<cmplx> xin, int N, int opts);
+std::string method_name(int i);
+std::string get_best_method(int N, int opts);
+std::vector<cmplx> fft_raders_fast(std::vector<cmplx> xin, int N, int opts);
+std::vector<cmplx> fft_raders_fft(std::vector<cmplx> xin, int N, bool padded, int opts);
 
 void fft_reset();
 void print_fft_bests();
 bool can_agarwal(int N);
-
 
 inline std::vector<int> fft_input_signature(std::vector<cmplx> xin) {
 	std::vector<int> sig;
@@ -98,13 +101,33 @@ struct best_x {
 		} else if (opts > other.opts) {
 			return false;
 		} else {
-			for (int n = 0; n < N; n++) {
+			for (int n = 0; n < sig.size(); n++) {
 				if (sig[n] < other.sig[n]) {
 					return true;
 				} else if (sig[n] > other.sig[n]) {
 					return false;
 				}
 			}
+		}
+		return false;
+	}
+};
+
+struct best_x2 {
+	int N;
+	int opts;
+	bool operator==(const best_x2& other) const {
+		return N == other.N && opts == other.opts;
+	}
+	bool operator<(const best_x2& other) const {
+		if (N < other.N) {
+			return true;
+		} else if (N > other.N) {
+			return false;
+		} else if (opts < other.opts) {
+			return true;
+		} else if (opts > other.opts) {
+			return false;
 		}
 		return false;
 	}

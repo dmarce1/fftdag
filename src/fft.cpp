@@ -6,23 +6,25 @@
 
 #define RADIX2 0
 #define RADIX4 1
-#define BRUUN 2
 #define SINGLETON 3
-#define RADERS 4
+#define RADERS_FFT 4
+#define RADERS_FAST 10
 #define RADERS_PADDED 5
-#define PRIME_POWER 6
+#define SUZUKI 6
 #define PRIME_FACTOR 7
 #define TANGENT 8
+#define RADER_BRENNER 11
 #define COOLEYTUKEY 9
-#define NFFT 9
+#define NFFT 12
 
-std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opts);
+std::vector<cmplx> fft_suzuki(int R, std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_radix4(std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_singleton(std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_prime_factor(int N1, int N2, std::vector<cmplx> xin, int opts);
-std::vector<cmplx> fft_raders(std::vector<cmplx> xin, int N, bool padded, int opts);
-std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_radix2(std::vector<cmplx> xin, int N, int opts);
+std::vector<cmplx> fft_split_prime(int N1, int N2, std::vector<cmplx> x, int opts);
+std::vector<cmplx> fft_raders_fast2(std::vector<cmplx> xin, int N, int opts);
+std::vector<cmplx> fft_rader_brenner(std::vector<cmplx> xin, int N, int opts);
 
 static int next_group = 1;
 
@@ -95,7 +97,7 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 			}
 		}
 	}
-	x = fft(x, N, opts);
+	x = fft(x, N, opts, true);
 
 	if (opts & FFT_INV) {
 		if (opts & FFT_REAL) {
@@ -177,7 +179,7 @@ std::set<int> radices_cooley_tukey(std::map<int, int> pfac, int N, int R = 1) {
 		if (pfac1[i->first] <= 0) {
 			pfac1.erase(i->first);
 		}
-		auto tmp = radices_prime_factor(pfac1, N, R * i->first);
+		auto tmp = radices_cooley_tukey(pfac1, N, R * i->first);
 		radices.insert(tmp.begin(), tmp.end());
 	}
 	return radices;
@@ -197,6 +199,58 @@ struct best_y {
 	int method;
 	int cnt;
 };
+
+std::map<best_x2, int> best_methods;
+
+std::string method_name(int i) {
+	std::string method;
+	switch (i) {
+	case RADIX2:
+		method += "radix-2";
+		break;
+	case TANGENT:
+		method += "tangent";
+		break;
+	case RADER_BRENNER:
+		method += "rader-brenner";
+		break;
+	case RADIX4:
+		method += "split4";
+		break;
+	case SINGLETON:
+		method += "Singleton";
+		break;
+	case RADERS_FFT:
+		method += "Raders (fft)";
+		break;
+	case RADERS_FAST:
+		method += "Raders (fast)";
+		break;
+	case RADERS_PADDED:
+		method += "Raders (padded)";
+		break;
+	case SUZUKI:
+		method += "Suzuki";
+		break;
+	case COOLEYTUKEY:
+		method += "Cooley-Tukey";
+		break;
+	case PRIME_FACTOR:
+		method += "Good-Thomas";
+		break;
+	default:
+		assert(false);
+	}
+	return method;
+}
+
+std::string get_best_method(int N, int opts) {
+	best_x2 x;
+	x.opts = opts;
+	x.N = N;
+	int ii = best_methods[x];
+	return method_name(ii);
+}
 
 static std::map<best_x, best_y> best;
 
@@ -224,52 +278,19 @@ void print_fft_bests() {
 			int M = (i->first.opts >> 16);
 			opts += " M = " + std::to_string(M);
 		}
-		std::string method;
-		switch (i->second.method) {
-		case RADIX2:
-			method += "radix-2";
-			break;
-		case TANGENT:
-			method += "tangent";
-			break;
-		case RADIX4:
-			method += "split4";
-			break;
-		case BRUUN:
-			method += "Bruun";
-			break;
-		case SINGLETON:
-			method += "Singleton";
-			break;
-		case RADERS:
-			method += "Raders";
-			break;
-		case RADERS_PADDED:
-			method += "Raders (padded)";
-			break;
-		case PRIME_POWER:
-			method += "radix-n";
-			break;
-		case COOLEYTUKEY:
-			method += "Cooley-Tukey";
-			break;
-		case PRIME_FACTOR:
-			method += "Good-Thomas";
-			break;
-		default:
-			assert(false);
+		return;
+		std::string method = method_name(i->second.method);
+//		if (i->second.method == SPLIT_PRIME) {
+		fprintf(stderr, "%32s | %16s | %i x %i \n", opts.c_str(), method.c_str(), i->second.R, i->first.N / i->second.R);
+		for (int n = 0; n < i->first.sig.size(); n++) {
+			fprintf(stderr, "%i ", i->first.sig[n]);
 		}
-		if (i->second.method == BRUUN) {
-			fprintf(stderr, "%32s | %16s | %i x %i \n", opts.c_str(), method.c_str(), i->second.R, i->first.N / i->second.R);
-			for (int n = 0; n < i->first.sig.size(); n++) {
-				fprintf(stderr, "%i ", i->first.sig[n]);
-			}
-			fprintf( stderr, "\n");
-		}
+		fprintf( stderr, "\n");
+//		}
 	}
 }
 
-std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
+std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts, bool root) {
 	if (N == 1) {
 		return xin;
 	}
@@ -308,51 +329,55 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 		int huge = std::numeric_limits<int>::max();
 		std::vector<best_y> tries;
 		best_y y;
-		/*if( greatest_prime_factor(N) <= 5 && (N % 4 == 0) ) {
-			y.R = N;
-			y.method = BRUUN;
-			y.cnt = op_count(fft_bruun(xin, N, opts));
-			y.cnt = 1;
-			tries.push_back(y);
-			printf( "%i %i\n", N, y.cnt);
-		}*/
 		if (N % 2 == 0) {
 			y.R = 2;
 			y.method = RADIX2;
 			y.cnt = op_count(fft_radix2(xin, N, opts));
 			tries.push_back(y);
-			if (N > 2) {
-				y.R = 2;
+			if (N > 2 && N % 4 == 0) {
+				y.R = 4;
 				y.method = RADIX4;
-				y.cnt = op_count(fft_radix2(xin, N, opts));
+				y.cnt = op_count(fft_radix4(xin, N, opts));
+				tries.push_back(y);
+				y.R = 4;
+				y.method = RADER_BRENNER;
+				y.cnt = op_count(fft_rader_brenner(xin, N, opts));
 				tries.push_back(y);
 			}
 			if (1 << ilogb(N) == N) {
+				int cnt1, cnt2;
 				y.R = 4;
 				y.method = TANGENT;
-				y.cnt = op_count(fft_modsplit(xin, N, opts));
+				cnt1 = y.cnt = op_count(fft_modsplit(xin, N, opts));
 				tries.push_back(y);
 			}
 		} else {
+			int rcnt, pcnt;
 			if (is_prime(N)) {
 				y.R = N;
 				y.method = SINGLETON;
 				y.cnt = op_count(fft_singleton(xin, N, opts));
 				tries.push_back(y);
-				//	y.R = N;
-				//	y.method = RADERS_PADDED;
-				//	y.cnt = op_count(fft_raders(xin, N, true, opts));
-				//	tries.push_back(y);
 			}
 			if (pfac.size() == 1) {
 				y.R = N;
-				y.method = RADERS;
-				y.cnt = op_count(fft_raders(xin, N, false, opts));
+				y.method = RADERS_FFT;
+				rcnt = y.cnt = op_count(fft_raders_fft(xin, N, false, opts));
+				tries.push_back(y);
+				if (N <= 48) {
+					y.R = N;
+					y.method = RADERS_FAST;
+					rcnt = y.cnt = op_count(fft_raders_fast(xin, N, opts));
+					tries.push_back(y);
+				}
+				y.R = N;
+				y.method = RADERS_PADDED;
+				pcnt = y.cnt = op_count(fft_raders_fft(xin, N, true, opts));
 				tries.push_back(y);
 				if (pfac.begin()->second > 1) {
 					y.R = pfac.begin()->first;
-					y.method = PRIME_POWER;
-					y.cnt = op_count(fft_prime_power(y.R, xin, N, opts));
+					y.method = SUZUKI;
+					y.cnt = op_count(fft_suzuki(y.R, xin, N, opts));
 					tries.push_back(y);
 				}
 			}
@@ -383,6 +408,12 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 		best[X] = tries[besti];
 	}
 	auto Y = best[X];
+	if (root) {
+		best_x2 x2;
+		x2.N = N;
+		x2.opts = opts;
+		best_methods[x2] = Y.method;
+	}
 	auto R = Y.R;
 	switch (Y.method) {
 	case RADIX2:
@@ -391,23 +422,26 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts) {
 	case RADIX4:
 		xout = fft_radix4(xin, N, opts);
 		break;
-	case BRUUN:
-		xout = fft_bruun(xin, N, opts);
-		break;
 	case SINGLETON:
 		xout = fft_singleton(xin, N, opts);
 		break;
-	case RADERS:
-		xout = fft_raders(xin, N, false, opts);
+	case RADERS_FAST:
+		xout = fft_raders_fast(xin, N, opts);
+		break;
+	case RADERS_FFT:
+		xout = fft_raders_fft(xin, N, false, opts);
 		break;
 	case TANGENT:
 		xout = fft_modsplit(xin, N, opts);
 		break;
-	case RADERS_PADDED:
-		xout = fft_raders(xin, N, true, opts);
+	case RADER_BRENNER:
+		xout = fft_rader_brenner(xin, N, opts);
 		break;
-	case PRIME_POWER:
-		xout = fft_prime_power(R, xin, N, opts);
+	case RADERS_PADDED:
+		xout = fft_raders_fft(xin, N, true, opts);
+		break;
+	case SUZUKI:
+		xout = fft_suzuki(R, xin, N, opts);
 		break;
 	case PRIME_FACTOR:
 		xout = fft_prime_factor(R, N / R, xin, opts);

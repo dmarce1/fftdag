@@ -138,7 +138,7 @@ const std::vector<std::complex<double>> twiddles(int N) {
 	return tw;
 }
 
-const std::vector<std::complex<double>> raders_four_twiddle(int N) {
+const std::vector<std::complex<double>> raders_twiddle(int N) {
 	auto factors = prime_factorization(N);
 	assert(factors.size() == 1);
 	int P = factors.begin()->first;
@@ -154,16 +154,24 @@ const std::vector<std::complex<double>> raders_four_twiddle(int N) {
 	return b;
 }
 
-const std::vector<std::complex<double>> raders_four_twiddle(int N, int M) {
-	std::vector<std::complex<double>> b(M, 0);
-	const auto tws = twiddles(N);
-	const auto ginvq = raders_ginvq(N);
-	b[0] = tws[ginvq[0]] * (1.0 / M);
-	for (int q = 1; q < N - 1; q++) {
-		b[M + q - (N - 1)] = b[q] = tws[ginvq[q]];
+const std::vector<std::complex<double>> raders_twiddle(int N, int M, bool padded) {
+	if (!padded) {
+		return raders_twiddle(N);
+	} else {
+		auto factors = prime_factorization(N);
+		assert(factors.size() == 1);
+		int P = factors.begin()->first;
+		int c = factors.begin()->second;
+		int L = std::pow(P, c - 1) * (P - 1);
+		std::vector<std::complex<double>> b(M);
+		const auto tws = twiddles(N);
+		const auto ginvq = raders_ginvq(N);
+		b[0] = tws[ginvq[0]];
+		for (int q = 1; q < L; q++) {
+			b[M + q - (N - 1)] = b[q] = tws[ginvq[q]];
+		}
+		return b;
 	}
-//	fftw(b);
-	return b;
 }
 
 std::vector<std::complex<double>> chirp_z_filter(int N) {

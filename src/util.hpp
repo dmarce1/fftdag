@@ -33,8 +33,7 @@ std::vector<int> raders_ginvq(int N);
 const std::vector<int> raders_gq(int N);
 void fftw(std::vector<std::complex<double>>& x);
 const std::vector<std::complex<double>> twiddles(int N);
-const std::vector<std::complex<double>> raders_four_twiddle(int N);
-const std::vector<std::complex<double>> raders_four_twiddle(int N, int M);
+const std::vector<std::complex<double>> raders_twiddle(int N, int M, bool padded);
 bool are_coprime(int a, int b);
 std::vector<std::complex<double>> chirp_z_filter(int N);
 

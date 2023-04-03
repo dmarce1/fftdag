@@ -1,8 +1,6 @@
 #include "fft.hpp"
 
-
-
-std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opts) {
+std::vector<cmplx> fft_suzuki(int R, std::vector<cmplx> xin, int N, int opts) {
 	assert(is_prime(R) && prime_factorization(N).size() == 1);
 	cmplx I( { 0.0, 1.0 });
 	if (N == R) {
@@ -61,7 +59,6 @@ std::vector<cmplx> fft_prime_power(int R, std::vector<cmplx> xin, int N, int opt
 				const auto t_0 = sub[I1(n1)][k2];
 				const auto t_1 = sub[I1(-n1)][k2];
 				x.x = x.x + w.x * (t_0.x + t_1.x) + w.y * (t_1.y - t_0.y);
-				;
 				x.y = x.y + w.x * (t_0.y + t_1.y) + w.y * (t_0.x - t_1.x);
 			}
 			xout[I0(k2 + k1 * N2)].x += x.x;
