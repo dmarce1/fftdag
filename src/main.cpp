@@ -7,8 +7,8 @@
 
 #include <time.h>
 
-constexpr int Nmin = 73;
-constexpr int Nmax = 73;
+constexpr int Nmin = 2;
+constexpr int Nmax = 128;
 
 //#define USE_DCT
 double rand1() {
@@ -85,22 +85,6 @@ int main(int argc, char **argv) {
 	 printf("%e\n", e);*/
 	int cnt1 = 0;
 	int cnt2 = 0;
-	fprintf( stderr, "------------------------------COMPLEX-----------------------------\n");
-	for (int N = Nmin; N <= Nmax; N++) {
-		auto inputs = math_vertex::new_inputs(2 * N);
-		auto outputs = fft(inputs, N, 0);
-		auto cnt = math_vertex::operation_count(outputs);
-		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
-		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		auto code = tmp.first;
-		std::string fname = "fft.complex." + std::to_string(N) + ".cpp";
-		FILE* fp = fopen(fname.c_str(), "wt");
-		code = std::string("\n\nvoid fft_complex_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
-		fprintf(fp, "%s\n", code.c_str());
-		fclose(fp);
-		cnt1 += tmp.second;
-		cnt2 += cnt.total();
-	}
 	/*fprintf( stderr, "------------------------------COMPLEX INVERSE-----------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(2 * N);
@@ -117,22 +101,6 @@ int main(int argc, char **argv) {
 		cnt1 += tmp.second;
 		cnt2 += cnt.total();
 	}*/
-	fprintf( stderr, "------------------------------REAL--------------------------------\n");
-	for (int N = Nmin; N <= Nmax; N++) {
-		auto inputs = math_vertex::new_inputs(N);
-		auto outputs = fft(inputs, N, FFT_REAL);
-		auto cnt = math_vertex::operation_count(outputs);
-		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
-		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		auto code = tmp.first;
-		std::string fname = "fft.real." + std::to_string(N) + ".cpp";
-		FILE* fp = fopen(fname.c_str(), "wt");
-		code = std::string("\n\nvoid fft_real_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
-		fprintf(fp, "%s\n", code.c_str());
-		fclose(fp);
-		cnt1 += tmp.second;
-		cnt2 += cnt.total();
-	}
 	fprintf( stderr, "------------------------------REAL INVERSE-------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(N);
@@ -144,6 +112,38 @@ int main(int argc, char **argv) {
 		std::string fname = "fft.real_inv." + std::to_string(N) + ".cpp";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		code = std::string("\n\nvoid fft_real_inv_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+		cnt1 += tmp.second;
+		cnt2 += cnt.total();
+	}
+	fprintf( stderr, "------------------------------COMPLEX-----------------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(2 * N);
+		auto outputs = fft(inputs, N, 0);
+		auto cnt = math_vertex::operation_count(outputs);
+		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
+		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+		auto code = tmp.first;
+		std::string fname = "fft.complex." + std::to_string(N) + ".cpp";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		code = std::string("\n\nvoid fft_complex_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+		cnt1 += tmp.second;
+		cnt2 += cnt.total();
+	}
+	fprintf( stderr, "------------------------------REAL--------------------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(N);
+		auto outputs = fft(inputs, N, FFT_REAL);
+		auto cnt = math_vertex::operation_count(outputs);
+		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
+		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+		auto code = tmp.first;
+		std::string fname = "fft.real." + std::to_string(N) + ".cpp";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		code = std::string("\n\nvoid fft_real_") + std::to_string(N) + "(double* x) {\n" + code + "}\n\n";
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;

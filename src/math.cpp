@@ -432,12 +432,13 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			visited.insert(id);
 		}
 	}
-	auto i = goals.end();
-	do {
-		i--;
-		S.push(i->second);
-	} while (i != goals.begin());
-
+	if (goals.size()) {
+		auto i = goals.end();
+		do {
+			i--;
+			S.push(i->second);
+		} while (i != goals.begin());
+	}
 	nodes.resize(0);
 	goals.clear();
 	while (S.size()) {
@@ -637,7 +638,11 @@ bool math_vertex::is_neg() const {
 math_vertex math_vertex::get_neg() const {
 	assert(valid());
 	if (is_neg()) {
-		return get_edge_in(0);
+		auto edge = get_edge_in(0);
+		if (v.properties().goal) {
+			edge.set_goal();
+		}
+		return edge;
 	} else {
 		return *this;
 	}
@@ -663,97 +668,132 @@ math_vertex math_vertex::optimize() {
 	if (edge_count(op) >= 2) {
 		b = get_edge_in(1);
 	}
-
+	op = c.v.properties().op;
+	assert(c.valid());
+	if (is_arithmetic(op)) {
+		assert(a.valid());
+		assert(c.v.get_edge_in_count());
+		if (op != NEG) {
+			assert(b.valid());
+			assert(c.v.get_edge_in_count() == 2);
+		}
+	}
 	bool flag = false;
+	int opt = 0;
 	switch (op) {
 	case ADD:
 		if (a.is_constant() && b.is_constant()) {
 			c = math_vertex(a.get_value() + b.get_value());
 			flag = true;
+			opt = 1;
 		} else if (a == b) {
 			c = a * math_vertex(2.0);
 			flag = true;
+			opt = 2;
 		} else if (a.is_neg() && b.is_neg()) {
 			c = -(a.get_neg() + b.get_neg());
 			flag = true;
+			opt = 3;
 		} else if (a.is_neg()) {
 			c = b - a.get_neg();
 			flag = true;
+			opt = 4;
 		} else if (b.is_neg()) {
 			c = a - b.get_neg();
 			flag = true;
+			opt = 5;
 		} else if (a.is_zero()) {
 			c = b;
 			flag = true;
+			opt = 6;
 		} else if (b.is_zero()) {
 			c = a;
 			flag = true;
+			opt = 7;
 		}
 		break;
 	case SUB:
 		if (a.is_constant() && b.is_constant()) {
 			c = math_vertex(a.get_value() - b.get_value());
 			flag = true;
+			opt = 8;
 		} else if (a == b) {
 			c = math_vertex(0.0);
 			flag = true;
+			opt = 9;
 		} else if (a.is_neg() && b.is_neg()) {
 			c = b.get_neg() - a.get_neg();
 			flag = true;
+			opt = 10;
 		} else if (a.is_neg()) {
 			c = -(a.get_neg() + b);
 			flag = true;
+			opt = 11;
 		} else if (b.is_neg()) {
 			c = b.get_neg() + a;
 			flag = true;
+			opt = 12;
 		} else if (a.is_zero()) {
 			c = -b;
 			flag = true;
+			opt = 13;
 		} else if (b.is_zero()) {
 			c = a;
 			flag = true;
+			opt = 14;
 		}
 		break;
 	case MUL:
 		if (a.is_constant() && b.is_constant()) {
 			c = math_vertex(a.get_value() * b.get_value());
 			flag = true;
-		} else if (a.is_neg() && b.is_neg()) {
-			c = a.get_neg() * b.get_neg();
-			flag = true;
-		} else if (a.is_neg()) {
-			c = -(a.get_neg() * b);
-			flag = true;
-		} else if (b.is_neg()) {
-			c = -(b.get_neg() * a);
-			flag = true;
+			opt = 15;
 		} else if (a.is_zero() || b.is_zero()) {
 			c = 0.0;
 			flag = true;
+			opt = 16;
 		} else if (a.is_one()) {
 			c = b;
 			flag = true;
+			opt = 17;
 		} else if (b.is_one()) {
 			c = a;
 			flag = true;
+			opt = 18;
 		} else if (a.is_neg_one()) {
 			c = -b;
 			flag = true;
+			opt = 19;
 		} else if (b.is_neg_one()) {
 			c = -a;
 			flag = true;
+			opt = 20;
+		} else if (a.is_neg() && b.is_neg()) {
+			c = a.get_neg() * b.get_neg();
+			flag = true;
+			opt = 21;
+		} else if (b.is_neg()) {
+			c = -(a * b.get_neg());
+			flag = true;
+			opt = 22;
+		} else if (a.is_neg()) {
+			c = -(a.get_neg() * b);
+			flag = true;
+			opt = 23;
 		}
 		break;
 	case NEG:
 		if (a.is_neg()) {
 			c = a.get_neg();
 			flag = true;
+			opt = 24;
 		}
 		break;
 	default:
 		break;
 	}
 	if (!flag) {
+		opt = 26;
 		if (is_additive(op)) {
 			if (a.get_op() == MUL && b.get_op() != MUL) {
 				std::swap(a, b);
@@ -808,6 +848,9 @@ math_vertex math_vertex::optimize() {
 			assert(b.valid());
 			assert(c.v.get_edge_in_count() == 2);
 		}
+	}
+	if (flag) {
+		c = c.optimize();
 	}
 	return c;
 }

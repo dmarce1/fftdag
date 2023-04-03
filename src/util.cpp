@@ -144,7 +144,7 @@ const std::vector<std::complex<double>> raders_twiddle(int N) {
 	int P = factors.begin()->first;
 	int c = factors.begin()->second;
 	int M = std::pow(P, c - 1) * (P - 1);
-	std::vector<std::complex<double>> b(M);
+	std::vector<std::complex<double>> b(M, 0.0);
 	const auto tws = twiddles(N);
 	const auto ginvq = raders_ginvq(N);
 	for (int q = 0; q < M; q++) {
@@ -163,12 +163,14 @@ const std::vector<std::complex<double>> raders_twiddle(int N, int M, bool padded
 		int P = factors.begin()->first;
 		int c = factors.begin()->second;
 		int L = std::pow(P, c - 1) * (P - 1);
-		std::vector<std::complex<double>> b(M);
+		std::vector<std::complex<double>> b(M, 0.0);
 		const auto tws = twiddles(N);
 		const auto ginvq = raders_ginvq(N);
-		b[0] = tws[ginvq[0]];
+		for (int q = 0; q < L; q++) {
+			b[q] = tws[ginvq[q]];
+		}
 		for (int q = 1; q < L; q++) {
-			b[M + q - (N - 1)] = b[q] = tws[ginvq[q]];
+			b[M - q] = b[L - q];
 		}
 		return b;
 	}
