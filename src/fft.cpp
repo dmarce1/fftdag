@@ -154,6 +154,48 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 	return std::move(xout);
 }
 
+int op_count(const std::vector<cmplx>& x, int opts) {
+	int N = x.size();
+	std::vector<math_vertex> y;
+	if (opts & FFT_INV) {
+		if (opts & FFT_REAL) {
+			for (int n = 0; n < N; n++) {
+				y.push_back(x[n].x);
+			}
+		} else {
+			for (int n = 0; n < N; n++) {
+				y.push_back(x[n].x);
+				y.push_back(x[n].y);
+			}
+		}
+	} else {
+		if (opts & FFT_REAL) {
+			for (int n = 0; n < (N + 1) / 2; n++) {
+				y.push_back(x[n].x);
+				y.push_back(x[n].y);
+			}
+		} else if (opts & FFT_DCT1) {
+			for (int n = 0; n < N / 2; n++) {
+				y.push_back(x[n].x);
+			}
+		} else if ((opts & FFT_DCT2) || (opts & FFT_DCT3)) {
+			for (int n = 0; n < N / 4; n++) {
+				y.push_back(x[n].x);
+			}
+		} else if (opts & FFT_DCT4) {
+			for (int n = 0; n < N / 8; n++) {
+				y.push_back(x[n].x);
+			}
+		} else {
+			for (int n = 0; n < N; n++) {
+				y.push_back(x[n].x);
+				y.push_back(x[n].y);
+			}
+		}
+	}
+	return math_vertex::operation_count(y).total();
+}
+
 std::set<int> radices_prime_factor(std::map<int, int> pfac, int N, int R = 1) {
 	std::set<int> radices;
 	if (R != 1 && R != N) {
@@ -183,15 +225,6 @@ std::set<int> radices_cooley_tukey(std::map<int, int> pfac, int N, int R = 1) {
 		radices.insert(tmp.begin(), tmp.end());
 	}
 	return radices;
-}
-
-int op_count(const std::vector<cmplx>& xs) {
-	std::vector<math_vertex> outs;
-	for (auto x : xs) {
-		outs.push_back(x.x);
-		outs.push_back(x.y);
-	}
-	return math_vertex::operation_count(outs).total();
 }
 
 struct best_y {
@@ -329,26 +362,40 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts, bool root) {
 		int huge = std::numeric_limits<int>::max();
 		std::vector<best_y> tries;
 		best_y y;
+		auto rpf = radices_prime_factor(pfac, N);
+		for (auto R : rpf) {
+			y.R = R;
+			y.method = PRIME_FACTOR;
+			y.cnt = op_count(fft_prime_factor(R, N / R, xin, opts), opts);
+			tries.push_back(y);
+		}
+		auto rct = radices_cooley_tukey(pfac, N);
+		for (auto R : rct) {
+			y.R = R;
+			y.method = COOLEYTUKEY;
+			y.cnt = op_count(fft_cooley_tukey(R, N / R, xin, opts), opts);
+			tries.push_back(y);
+		}
 		if (N % 2 == 0) {
 			y.R = 2;
 			y.method = RADIX2;
-			y.cnt = op_count(fft_radix2(xin, N, opts));
+			y.cnt = op_count(fft_radix2(xin, N, opts), opts);
 			tries.push_back(y);
 			if (N > 2 && N % 4 == 0) {
 				y.R = 4;
 				y.method = RADIX4;
-				y.cnt = op_count(fft_radix4(xin, N, opts));
+				y.cnt = op_count(fft_radix4(xin, N, opts), opts);
 				tries.push_back(y);
 				y.R = 4;
 				y.method = RADER_BRENNER;
-				y.cnt = op_count(fft_rader_brenner(xin, N, opts));
+				y.cnt = op_count(fft_rader_brenner(xin, N, opts), opts);
 				tries.push_back(y);
 			}
 			if (1 << ilogb(N) == N) {
 				int cnt1, cnt2;
 				y.R = 4;
 				y.method = TANGENT;
-				cnt1 = y.cnt = op_count(fft_modsplit(xin, N, opts));
+				cnt1 = y.cnt = op_count(fft_modsplit(xin, N, opts), opts);
 				tries.push_back(y);
 			}
 		} else {
@@ -356,45 +403,31 @@ std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts, bool root) {
 			if (is_prime(N)) {
 				y.R = N;
 				y.method = SINGLETON;
-				y.cnt = op_count(fft_singleton(xin, N, opts));
+				y.cnt = op_count(fft_singleton(xin, N, opts), opts);
 				tries.push_back(y);
 			}
 			if (pfac.size() == 1) {
+				if (pfac.begin()->second > 1 && pfac.begin()->first == 3) {
+					y.R = pfac.begin()->first;
+					y.method = SUZUKI;
+					y.cnt = op_count(fft_suzuki(y.R, xin, N, opts), opts);
+					tries.push_back(y);
+				}
 				y.R = N;
 				y.method = RADERS_FFT;
-				rcnt = y.cnt = op_count(fft_raders_fft(xin, N, false, opts));
+				rcnt = y.cnt = op_count(fft_raders_fft(xin, N, false, opts), opts);
 				tries.push_back(y);
 				if (N <= 48) {
 					y.R = N;
 					y.method = RADERS_FAST;
-					rcnt = y.cnt = op_count(fft_raders_fast(xin, N, opts));
+					rcnt = y.cnt = op_count(fft_raders_fast(xin, N, opts), opts);
 					tries.push_back(y);
 				}
 				y.R = N;
 				y.method = RADERS_PADDED;
-				pcnt = y.cnt = op_count(fft_raders_fft(xin, N, true, opts));
+				pcnt = y.cnt = op_count(fft_raders_fft(xin, N, true, opts), opts);
 				tries.push_back(y);
-				if (pfac.begin()->second > 1) {
-					y.R = pfac.begin()->first;
-					y.method = SUZUKI;
-					y.cnt = op_count(fft_suzuki(y.R, xin, N, opts));
-					tries.push_back(y);
-				}
 			}
-		}
-		auto rpf = radices_prime_factor(pfac, N);
-		for (auto R : rpf) {
-			y.R = R;
-			y.method = PRIME_FACTOR;
-			y.cnt = op_count(fft_prime_factor(R, N / R, xin, opts));
-			tries.push_back(y);
-		}
-		auto rct = radices_cooley_tukey(pfac, N);
-		for (auto R : rct) {
-			y.R = R;
-			y.method = COOLEYTUKEY;
-			y.cnt = op_count(fft_cooley_tukey(R, N / R, xin, opts));
-			tries.push_back(y);
 		}
 		int besti = -1;
 		int bestcnt = huge;

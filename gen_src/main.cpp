@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <fenv.h>
 
-#define USE_DCT
+//#define USE_DCT
 
 class timer {
 	std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
@@ -32,7 +32,7 @@ public:
 	}
 };
 
-std::vector<std::complex<double>> convolve_test(std::vector<std::complex<double>> x) {
+/*std::vector<std::complex<double>> convolve_test(std::vector<std::complex<double>> x) {
 	int N = x.size();
 	auto h = x;
 	srand(42);
@@ -46,7 +46,7 @@ std::vector<std::complex<double>> convolve_test(std::vector<std::complex<double>
 		}
 	}
 	return std::move(y);
-}
+}*/
 
 /*void fftw(std::vector<std::complex<double>>& x) {
 	const int N = x.size();
@@ -302,7 +302,7 @@ void test() {
 		}
 		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
 	}
-	tm3.reset();
+/*	tm3.reset();
 	tm4.reset();
 	printf("\nCOMPLEX INVERSE\n");
 	for (int N = FFT_NMIN; N <= FFT_NMAX; N += 1) {
@@ -340,7 +340,7 @@ void test() {
 			err = sqrt(err / N) / max;
 		}
 		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
-	}
+	}*/
 	tm3.reset();
 	tm4.reset();
 	printf("\nREAL\n");
@@ -598,7 +598,7 @@ void test() {
 		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
 	}
 #endif
-	tm3.reset();
+/*	tm3.reset();
 	tm4.reset();
 	printf("\nCONVOLUTION\n");
 	for (int N = FFT_NMIN; N <= std::min(32,FFT_NMAX); N += 1) {
@@ -635,7 +635,7 @@ void test() {
 			err = sqrt(err / N) / max;
 		}
 		printf("%4i %e %e %e %e %e %e %e\n", N, err, tm1.read(), tm2.read(), tm1.read() / tm2.read(), tm3.read(), tm4.read(), tm3.read() / tm4.read());
-	}
+	}*/
 	/*int N = 32;
 	 std::vector<std::complex<double>> X1(N);
 	 std::vector<std::complex<double>> X2(N);

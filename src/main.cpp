@@ -7,10 +7,10 @@
 
 #include <time.h>
 
-constexpr int Nmin = 2;
-constexpr int Nmax = 32;
+constexpr int Nmin = 73;
+constexpr int Nmax = 73;
 
-#define USE_DCT
+//#define USE_DCT
 double rand1() {
 	return (rand() + 0.5) / RAND_MAX;
 }
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
 		cnt1 += tmp.second;
 		cnt2 += cnt.total();
 	}
-	fprintf( stderr, "------------------------------COMPLEX INVERSE-----------------------\n");
+	/*fprintf( stderr, "------------------------------COMPLEX INVERSE-----------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(2 * N);
 		auto outputs = fft(inputs, N, FFT_INV);
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
 		fclose(fp);
 		cnt1 += tmp.second;
 		cnt2 += cnt.total();
-	}
+	}*/
 	fprintf( stderr, "------------------------------REAL--------------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(N);
@@ -216,7 +216,7 @@ int main(int argc, char **argv) {
 		cnt2 += cnt.total();
 	}
 #endif
-	fprintf( stderr, "------------------------------CONVOLVE-----------------------------\n");
+/*	fprintf( stderr, "------------------------------CONVOLVE-----------------------------\n");
 	for (int N = Nmin; N <= std::min(Nmax, 32); N++) {
 		std::vector<std::complex<double>> h(N);
 		srand(42);
@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
 		fclose(fp);
 		cnt1 += tmp.second;
 		cnt2 += cnt.total();
-	}
+	}*/
 	fprintf( stderr, "O: %i D: %i\n", cnt2, cnt1);
 	system("cp ../../gen_src/main.cpp .\n");
 	system("cp ../../gen_src/util.cpp .\n");
@@ -265,24 +265,24 @@ int main(int argc, char **argv) {
 	fprintf(fp, "#pragma once\n\n");
 	fprintf(fp, "#define FFT_NMAX %i\n", Nmax);
 	fprintf(fp, "#define FFT_NMIN %i\n\n\n", Nmin);
-	for (int N = Nmin; N <= Nmax; N++) {
+/*	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void convolve_%i(double*);\n", N);
-	}
+	}*/
 	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void fft_complex_%i(double*);\n", N);
 	}
-	for (int N = Nmin; N <= Nmax; N++) {
-		fprintf(fp, "void fft_complex_inv_%i(double*);\n", N);
-	}
+//	for (int N = Nmin; N <= Nmax; N++) {
+//		fprintf(fp, "void fft_complex_inv_%i(double*);\n", N);
+//	}
 	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void fft_real_%i(double*);\n", N);
 	}
 	for (int N = Nmin; N <= Nmax; N++) {
 		fprintf(fp, "void fft_real_inv_%i(double*);\n", N);
 	}
-	fprintf(fp, "\n\nvoid convolve(double*, int);\n");
+	//fprintf(fp, "\n\nvoid convolve(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_complex(double*, int);\n");
-	fprintf(fp, "\n\nvoid fft_complex_inv(double*, int);\n");
+//	fprintf(fp, "\n\nvoid fft_complex_inv(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_real(double*, int);\n");
 	fprintf(fp, "\n\nvoid fft_real_inv(double*, int);\n");
 #ifdef USE_DCT
@@ -309,7 +309,7 @@ int main(int argc, char **argv) {
 	fp = fopen("fft.cpp", "wt");
 	fprintf(fp, "#include \"fft.hpp\"\n\n\n");
 	fprintf(fp, "using fft_type = void(*)(double*);\n\n");
-	fprintf(fp, "fft_type convolve_pointer[FFT_NMAX + 1] = {");
+/*	fprintf(fp, "fft_type convolve_pointer[FFT_NMAX + 1] = {");
 	for (int N = 0; N <= Nmax; N++) {
 		if (N % 8 == 0) {
 			fprintf(fp, "\n\t");
@@ -323,7 +323,7 @@ int main(int argc, char **argv) {
 			fprintf(fp, ", ");
 		}
 	}
-	fprintf(fp, "\n};\n\n");
+	fprintf(fp, "\n};\n\n");*/
 	fprintf(fp, "#include \"fft.hpp\"\n\n\n");
 	fprintf(fp, "using fft_type = void(*)(double*);\n\n");
 	fprintf(fp, "fft_type fft_complex_pointer[FFT_NMAX + 1] = {");
@@ -341,7 +341,7 @@ int main(int argc, char **argv) {
 		}
 	}
 	fprintf(fp, "\n};\n\n");
-	fprintf(fp, "fft_type fft_complex_inv_pointer[FFT_NMAX + 1] = {");
+/*	fprintf(fp, "fft_type fft_complex_inv_pointer[FFT_NMAX + 1] = {");
 	for (int N = 0; N <= Nmax; N++) {
 		if (N % 8 == 0) {
 			fprintf(fp, "\n\t");
@@ -355,7 +355,7 @@ int main(int argc, char **argv) {
 			fprintf(fp, ", ");
 		}
 	}
-	fprintf(fp, "\n};\n\n");
+	fprintf(fp, "\n};\n\n");*/
 	fprintf(fp, "fft_type fft_real_pointer[FFT_NMAX + 1] = {");
 	for (int N = 0; N <= Nmax; N++) {
 		if (N % 8 == 0) {
@@ -386,15 +386,15 @@ int main(int argc, char **argv) {
 		}
 	}
 	fprintf(fp, "\n};\n\n");
-	fprintf(fp, "void convolve(double* x, int N) {\n");
+/*	fprintf(fp, "void convolve(double* x, int N) {\n");
 	fprintf(fp, "\t(*convolve_pointer[N])(x);\n");
-	fprintf(fp, "}\n\n\n");
+	fprintf(fp, "}\n\n\n");*/
 	fprintf(fp, "void fft_complex(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_complex_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
-	fprintf(fp, "void fft_complex_inv(double* x, int N) {\n");
+/*	fprintf(fp, "void fft_complex_inv(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_complex_inv_pointer[N])(x);\n");
-	fprintf(fp, "}\n\n\n");
+	fprintf(fp, "}\n\n\n");*/
 	fprintf(fp, "void fft_real(double* x, int N) {\n");
 	fprintf(fp, "\t(*fft_real_pointer[N])(x);\n");
 	fprintf(fp, "}\n\n\n");
@@ -483,16 +483,16 @@ int main(int argc, char **argv) {
 	fprintf(fp, "CFLAGS=-I. -Ofast -march=native\n");
 //	fprintf(fp, "CFLAGS=-I. -g -D_GLIBCXX_DEBUG\n");
 	fprintf(fp, "DEPS = fft.hpp\n");
-	fprintf(fp, "OBJ = main.o fft.o util.o ");
-	for (int n = Nmin; n <= Nmax; n++) {
+	fprintf(fp, "OBJ = fft.o util.o ");
+/*	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "convolve.%i.o ", n);
-	}
+	}*/
 	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.complex.%i.o ", n);
 	}
-	for (int n = Nmin; n <= Nmax; n++) {
+/*	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.complex_inv.%i.o ", n);
-	}
+	}*/
 	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.real.%i.o ", n);
 	}
@@ -515,8 +515,10 @@ int main(int argc, char **argv) {
 #endif
 	fprintf(fp, "\n%%.o: %%.cpp $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
-	fprintf(fp, "ffttest: $(OBJ)\n");
+	fprintf(fp, "ffttest: $(OBJ) main.o\n");
 	fprintf(fp, "\t$(CC) -o $@ $^ $(CFLAGS) -lfftw3\n");
+	fprintf(fp, "sfftlib.a: $(OBJ)\n");
+	fprintf(fp, "\tar -rcs sfftlib.a $(OBJ)\n");
 	fclose(fp);
 	print_fft_bests();
 	return 0;
