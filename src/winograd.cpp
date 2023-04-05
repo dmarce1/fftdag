@@ -56,99 +56,239 @@ static double rand1() {
 	return 2.0 * (rand() + 0.5) / (RAND_MAX + 1.0) - 1.0;
 }
 
+/*muls += (xq.degree() + 1) * (hq.degree() + 1);
+ adds += (xq.degree() + 1) * (hq.degree() + 1) - hq.degree() - xq.degree() - 1;
+ adds += (q[i].degree()) * (q[i].degree());
+ adds += (hxq.degree() + 1) * (s.degree() + 1) - hxq.degree() - s.degree() - 1;
+ */
+
 std::vector<std::complex<double>> winograd_convolve(const std::vector<std::complex<double>>& X, const std::vector<std::complex<double>>& H);
 
-std::vector<poly> polynomial_transform(const std::vector<poly>& xn, poly m, int P) {
-	std::vector<poly> Xk(P);
+template<class T, class U>
+std::vector<polynomial<T>> polynomial_transform(const std::vector<polynomial<T>>& xn, polynomial<U> m, int P, int r = 1) {
+	using polyT = polynomial<T>;
+	using polyU = polynomial<U>;
+	std::vector<polyT> xk(P);
 	for (int k = 0; k < P; k++) {
-		for (int r = 0; r < P; r++) {
-			poly root;
-			root[r * k] = 1.0;
-			Xk[k] = (Xk[k] + xn[r] * root) % m;
+		for (int n = 0; n < P; n++) {
+			polyU w;
+			w[r * n * k] = U(1);
+			xk[k] += (xn[n] * w) % m;
 		}
 	}
-	return Xk;
+	return xk;
 }
 
-std::vector<poly> inverse_polynomial_transform(const std::vector<poly>& xk, poly m, int P) {
-	std::vector<poly> Xn(P);
+template<class T, class U>
+std::vector<polynomial<T>> inverse_polynomial_transform(const std::vector<polynomial<T>>& xk, polynomial<U> m, int P, int n = 1) {
+	using polyT = polynomial<T>;
+	using polyU = polynomial<U>;
+	std::vector<polyT> Xn(P);
 	for (int r = 0; r < P; r++) {
 		for (int k = 0; k < P; k++) {
-			poly root;
-			root[(P - 1) * r * k] = 1.0 / P;
+			polyU root;
+			root[(P - 1) * n * r * k] = 1.0 / P;
 			Xn[r] = (Xn[r] + xk[k] * root) % m;
 		}
 	}
 	return Xn;
 }
 
-std::vector<std::vector<std::complex<double>>>convolve2d(const std::vector<std::vector<std::complex<double>>>& X, const std::vector<std::vector<std::complex<double>>>& H) {
-	int N1 = X.size();
-	int N2 = X[0].size();
-	poly m, p1, p2;
-	std::vector<poly> x(N1);
-	std::vector<poly> h(N1);
-	std::vector<poly> h2(N1);
-	std::vector<poly> x2(N1);
-	std::vector<poly> h1(N1);
-	std::vector<poly> x1(N1);
-	std::vector<poly> y2(N1);
-	std::vector<poly> y(N1);
-	std::vector<std::vector<std::complex<double>>> yr(N1, std::vector<std::complex<double>>(N2));
-	m[N2] = 1.0;
-	m[0] = -1.0;
-	p2[1] = 1.0;
-	p2[0] = -1.0;
-	p1 = m / p2;
-	for (int n1 = 0; n1 < N1; n1++) {
-		for (int n2 = 0; n2 < N2; n2++) {
-			x[n1][n2] = X[n1][n2];
-			h[n1][n2] = H[n1][n2];
+template<class T, class U>
+polynomial<T> convolve_1d(const polynomial<T>& x, const polynomial<U>& h, int N) {
+	poly m, y;
+	std::vector<poly> q;
+	m[0] = U(-1);
+	m[N] = U(1);
+	for (int d = 1; d <= N; d++) {
+		if (N % d == 0) {
+			q.push_back(cyclotomic(d));
 		}
 	}
-	for( int n1 = 0; n1 < N1; n1++) {
-		x1[n1] = x[n1] % p1;
-		h1[n1] = h[n1] % p1;
-		x2[n1] = x[n1] % p2;
-		h2[n1] = h[n1] % p2;
+	int K = q.size();
+	for (int i = 0; i < K; i++) {
+		auto t = (m / q[i]) % m;
+		auto s = (t * inverse(t % q[i], q[i])) % m;
+		auto hq = h % q[i];
+		auto xq = x % q[i];
+		auto hx = xq * hq;
+		auto hxq = hx % q[i];
+		auto shx = (s * hxq) % m;
+		y += shx;
 	}
-	auto X1k = polynomial_transform(x1, p1, N2);
-	auto H1k = polynomial_transform(h1, p1, N2);
-	std::vector<poly> Y1k(N1);
-	for( int n = 0; n < N1; n++) {
+	return y;
+}
+
+template<class T, class U>
+std::vector<polynomial<U>> convolve_2d_p(const std::vector<polynomial<T>>& x0, const std::vector<polynomial<U>>& h0) {
+	using polyT = polynomial<T>;
+	using polyU = polynomial<U>;
+	int P = x0.size();
+	poly m, p1, p2;
+	std::vector<polyT> x1(P);
+	std::vector<polyU> h1(P);
+	std::vector<polyU> h2(P);
+	std::vector<polyT> x2(P);
+	std::vector<polyT> y0(P);
+	std::vector<polyT> y2(P);
+	polyT tx;
+	polyU th;
+	m[P] = U(1);
+	m[0] = U(-1);
+	p2[1] = U(1);
+	p2[0] = U(-1);
+	p1 = m / p2;
+	for (int n1 = 0; n1 < P; n1++) {
+		x1[n1] = x0[n1] % p1;
+		h1[n1] = h0[n1] % p1;
+		x2[n1] = x0[n1] % p2;
+		h2[n1] = h0[n1] % p2;
+	}
+	auto X1k = polynomial_transform(x1, p1, P);
+	auto H1k = polynomial_transform(h1, p1, P);
+	std::vector<polyT> Y1k(P);
+	for (int n = 0; n < P; n++) {
 		Y1k[n] = (X1k[n] * H1k[n]) % p1;
 	}
-	auto y1 = inverse_polynomial_transform(Y1k, p1, N2);
-	for( int n = 0; n < N1; n++) {
-		for( int m = 0; m < N1; m++) {
-			y2[n] += (x2[m] * h2[mod(n - m, N1)]) % p2;
-		}
+	auto y1 = inverse_polynomial_transform(Y1k, p1, P);
+	for (int n = 0; n < P; n++) {
+		tx[n] = x2[n][0];
+		th[n] = h2[n][0];
 	}
-	for( int n1 = 0; n1 < N1; n1++) {
+	auto ty = convolve_1d(tx, th, P);
+	for (int n = 0; n < P; n++) {
+		y2[n][0] = ty[n];
+	}
+	for (int n1 = 0; n1 < P; n1++) {
 		poly t1 = (m / p1) % m;
 		poly t2 = (m / p2) % m;
 		poly s1 = (t1 * inverse(t1 % p1, p1)) % m;
 		poly s2 = (t2 * inverse(t2 % p2, p2)) % m;
-		y[n1] = (y1[n1] * s1 + y2[n1] * s2) % m;
+		y0[n1] = (y1[n1] * s1 + y2[n1] * s2) % m;
 	}
-	for (int n1 = 0; n1 < N1; n1++) {
-		for (int n2 = 0; n2 < N2; n2++) {
-			yr[n1][n2] = y[n1][n2];
+	return y0;
+}
+
+template<class T, class U>
+std::vector<polynomial<U>> convolve_2d_p2(const std::vector<polynomial<T>>& x0, const std::vector<polynomial<U>>& h0) {
+	using polyT = polynomial<T>;
+	using polyU = polynomial<U>;
+	int P2 = x0.size();
+	std::vector<std::vector<T>> yr(P2, std::vector<T>(P2));
+	int P = lround(sqrt(P2));
+	poly m, r1, r2;
+	std::vector<polyT> h1(P2);
+	std::vector<polyT> h2(P2);
+	std::vector<polyT> h3(P);
+	std::vector<polyT> h4(P);
+	std::vector<polyT> h5(P);
+	std::vector<polyU> x1(P2);
+	std::vector<polyU> x2(P2);
+	std::vector<polyU> x3(P);
+	std::vector<polyU> x4(P);
+	std::vector<polyU> x5(P);
+	std::vector<polyU> y0(P2);
+	std::vector<polyU> y2(P);
+	std::vector<polyU> y3(P2);
+	std::vector<polyU> y5(P);
+	std::vector<polyU> y1k(P2);
+	std::vector<polyU> y4k(P2);
+	polyT tx;
+	polyU th;
+	m[P2] = U(1);
+	m[0] = U(-1);
+	r2[P] = U(1);
+	r2[0] = U(-1);
+	r1 = (m / r2);
+	for (int p = 0; p < P2; p++) {
+		x1[p] = x0[p] % r1;
+		h1[p] = h0[p] % r1;
+		x2[p] = x0[p] % r2;
+		h2[p] = h0[p] % r2;
+	}
+	for (int p = 0; p < P; p++) {
+		for (int q = 0; q < P2; q++) {
+			h3[p][q] = h2[q][p];
+			x3[p][q] = x2[q][p];
 		}
 	}
-	return yr;
+	for (int p = 0; p < P; p++) {
+		h4[p] = h3[p] % r1;
+		x4[p] = x3[p] % r1;
+		h5[p] = h3[p] % r2;
+		x5[p] = x3[p] % r2;
+	}
+	auto x1k = polynomial_transform(x1, r1, P2);
+	auto h1k = polynomial_transform(h1, r1, P2);
+	for (int p = 0; p < P2; p++) {
+		y1k[p] = x1k[p] * h1k[p];
+	}
+	auto y1 = inverse_polynomial_transform(y1k, r1, P2);
+	auto x4k = polynomial_transform(x4, r1, P, P);
+	auto h4k = polynomial_transform(h4, r1, P, P);
+	for (int p = 0; p < P; p++) {
+		y4k[p] = x4k[p] * h4k[p];
+	}
+	auto y4 = inverse_polynomial_transform(y4k, r1, P, P);
+	for (int p = 0; p < P; p++) {
+		for (int q = 0; q < P; q++) {
+			y5[p] += (x5[q] * h5[mod(p - q, P)]) % r2;
+		}
+	}
+	y5 = convolve_2d_p(x5, h5);
+	for (int p = 0; p < P; p++) {
+		polyU t1 = (m / r1) % m;
+		polyU t2 = (m / r2) % m;
+		polyU s1 = (t1 * inverse(t1 % r1, r1)) % m;
+		polyU s2 = (t2 * inverse(t2 % r2, r2)) % m;
+		y2[p] = (y4[p] * s1 + y5[p] * s2) % m;
+	}
+	for (int p = 0; p < P; p++) {
+		for (int q = 0; q < P2; q++) {
+			y0[q][p] = y2[p][q];
+		}
+	}
+	for (int p = 0; p < P2; p++) {
+		polyU t1 = (m / r1) % m;
+		polyU t2 = (m / r2) % m;
+		polyU s1 = (t1 * inverse(t1 % r1, r1)) % m;
+		polyU s2 = (t2 * inverse(t2 % r2, r2)) % m;
+		y0[p] = (y1[p] * s1 + y0[p] * s2) % m;
+	}
+	return y0;
 }
 
 void test_poly() {
-	constexpr int N1 = 5;
-	constexpr int N2 = 5;
-	std::vector<std::vector<std::complex<double>>>X(N1,std::vector<std::complex<double>>(N2));
+	constexpr int N1 = 9;
+	constexpr int N2 = 9;
+	polynomial<std::complex<double>> tx, th, ty0, ty1;
+	for (int n = 0; n < N1; n++) {
+		tx[n].real(rand1());
+		th[n].real(rand1());
+		tx[n].imag(0);
+		th[n].imag(0);
+	}
+	for (int n = 0; n < N1; n++) {
+		for (int m = 0; m < N1; m++) {
+			ty0[n] += tx[m] * th[mod(n - m, N1)];
+		}
+	}
+	ty1 = convolve_1d(tx, th, N1);
+	double avg_err = 0.0;
+	for (int n1 = 0; n1 < N1; n1++) {
+		double err = std::abs(ty0[n1] - ty1[n1]);
+		avg_err += err / (N1 * N2);
+		printf("%i | %e %e | %e %e | %e\n", n1, ty0[n1].real(), ty0[n1].imag(), ty1[n1].real(), ty1[n1].imag(), err);
+	}
+	printf("%e\n", avg_err);
+
+	std::vector<polynomial<std::complex<double>>> X(N1,polynomial<std::complex<double>>());
 	auto H = X;
 	auto Y0 = X;
 	for (int n1 = 0; n1 < N1; n1++) {
 		for (int n2 = 0; n2 < N2; n2++) {
-			X[n1][n2].real(rand1());
-			H[n1][n2].real(rand1());
+			X[n1][n2].real(n1 * n2 + n1);
+			H[n1][n2].real(sqrt(n1 * n2) - n2);
 			X[n1][n2].imag(0);
 			H[n1][n2].imag(0);
 		}
@@ -163,8 +303,8 @@ void test_poly() {
 			}
 		}
 	}
-	auto Y1 = convolve2d(X, H);
-	double avg_err = 0.0;
+	auto Y1 = convolve_2d_p2(X, H);
+	avg_err = 0.0;
 	for (int n1 = 0; n1 < N1; n1++) {
 		for (int n2 = 0; n2 < N2; n2++) {
 			double err = std::abs(Y0[n1][n2] - Y1[n1][n2]);
@@ -175,56 +315,6 @@ void test_poly() {
 	printf("%e\n", avg_err);
 }
 
-std::vector<std::complex<double>> winograd_convolve(const std::vector<std::complex<double>>& X, const std::vector<std::complex<double>>& H) {
-	int N = X.size();
-	poly m, y, x, h;
-	std::vector<poly> q;
-	std::vector<std::complex<double>> yr(N);
-	for (int n = 0; n < N; n++) {
-		x[n] = X[n];
-		h[n] = H[n];
-	}
-	m[0] = -1.0;
-	m[N] = 1.0;
-	for (int d = 1; d <= N; d++) {
-		if (N % d == 0) {
-			q.push_back(cyclotomic(d));
-		}
-	}
-	int K = q.size();
-	int muls = 0;
-	int adds = 0;
-	for (int i = 0; i < K; i++) {
-		auto t = (m / q[i]) % m;
-		auto s = (t * inverse(t % q[i], q[i])) % m;
-		auto hq = h % q[i];
-		auto xq = x % q[i];
-		adds += (q[i].degree()) * (q[i].degree());
-		auto hx = xq * hq;
-		auto hxq = hx % q[i];
-		auto shx = (s * hxq) % m;
-		muls += (xq.degree() + 1) * (hq.degree() + 1);
-		adds += (xq.degree() + 1) * (hq.degree() + 1) - hq.degree() - xq.degree() - 1;
-		adds += (q[i].degree()) * (q[i].degree());
-		adds += (hxq.degree() + 1) * (s.degree() + 1) - hxq.degree() - s.degree() - 1;
-		y += shx;
-		printf("x =      %s\n", x.to_str().c_str());
-		printf("h =      %s\n", h.to_str().c_str());
-		printf("q =      %s\n", q[i].to_str().c_str());
-		printf("s =      %s\n", s.to_str().c_str());
-		printf("xq =      %s\n", xq.to_str().c_str());
-		printf("hq =     %s\n", hq.to_str().c_str());
-		printf("hx =     %s\n", hx.to_str().c_str());
-		printf("hxq =    %s\n", hxq.to_str().c_str());
-		printf("shx =    %s\n", shx.to_str().c_str());
-		printf("\n\n");
-	}
-	for (int n = 0; n < N; n++) {
-		yr[n] = y[n];
-	}
-	printf("%i adds %i muls\n", adds, muls);
-	return yr;
-}
 /*
  std::vector<cmplx> winograd_convolve(std::vector<cmplx> X, std::vector<std::complex<double>> H) {
  int N = X.size();
