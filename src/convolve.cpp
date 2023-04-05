@@ -72,7 +72,7 @@ inline double toomB(int N, int n, int m) {
 }
 
 std::vector<cmplx> operator*(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
-	return convolve_fast(x, h);
+	return convolve_fast(x, h, 0);
 }
 
 template<class T>
@@ -616,7 +616,7 @@ std::vector<cmplx> convolve_dispatch(std::vector<cmplx> X, std::vector<std::comp
 	} else if (N % 5 == 0) {
 		y = convolve_toom(5, X, H);
 	} else {
-		y = convolve_fft(X, H);
+		y = convolve_fft(X, H, 0);
 	}
 	for (auto z : y) {
 		z.set_goal();
@@ -717,7 +717,15 @@ int operation_count(std::vector<std::vector<cmplx>> x) {
 	return cnt;
 }
 
-std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
+static std::map<best_x, int> cache;
+static std::map<best_x, int> cache2;
+
+void convolve_reset_cache() {
+	cache = decltype(cache)();
+	cache2 = decltype(cache2)();
+}
+
+std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<double>> h, int opts) {
 	int N = x.size();
 	if (N == 1) {
 		return std::vector<cmplx>(1, x[0] * h[0]);
@@ -727,11 +735,10 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 	best_x X;
 	X.N = N;
 	X.sig = fft_input_signature(x);
-	X.opts = 0;
+	X.opts = opts;
 	if (can_fast_cyclic(N)) {
 		y = convolve_tiny(x, h);
 	} else if (can_agarwal(N)) {
-		static std::map<best_x, int> cache;
 		if (cache.find(X) == cache.end()) {
 			auto p = prime_factorization(N);
 			int best_N1;
@@ -761,7 +768,7 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 		} else if (N % 2 == 0) {
 			y = convolve_toom(2, x, h);
 		} else {
-			y = convolve_fft(x, h);
+			y = convolve_fft(x, h, opts);
 		}
 	}
 	for (auto z : y) {
@@ -786,27 +793,26 @@ std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<doubl
 	if (N == 1) {
 		return std::vector<cmplx>(1, x[0] * h[0]);
 	}
-	static std::map<best_x, int> cache;
 	best_x X;
 	X.opts = opts;
 	X.N = N;
 	X.sig = fft_input_signature(x);
-	if (cache.find(X) == cache.end()) {
+	if (cache2.find(X) == cache2.end()) {
 		int slow_cnt;
 		int fast_cnt;
 		int fft_cnt;
 		std::vector<cmplx> y;
 		fast_cnt = math_vertex::operation_count(x * h).total();
-		fft_cnt = math_vertex::operation_count(convolve_fft(x, h)).total();
+		fft_cnt = math_vertex::operation_count(convolve_fft(x, h, opts)).total();
 		if (fast_cnt < fft_cnt && fast_cnt > 0) {
-			cache[X] = FAST_CONVOLVE;
+			cache2[X] = FAST_CONVOLVE;
 		} else {
-			cache[X] = FFT_CONVOLVE;
+			cache2[X] = FFT_CONVOLVE;
 		}
 	}
-	switch (cache[X]) {
+	switch (cache2[X]) {
 	case FFT_CONVOLVE:
-		return convolve_fft(x, h);
+		return convolve_fft(x, h, opts);
 	case FAST_CONVOLVE:
 		return x * h;
 	default:
@@ -815,9 +821,9 @@ std::vector<cmplx> convolve(std::vector<cmplx> x, std::vector<std::complex<doubl
 	}
 }
 
-std::vector<cmplx> convolve_fft(std::vector<cmplx> x, std::vector<std::complex<double>> h) {
+std::vector<cmplx> convolve_fft(std::vector<cmplx> x, std::vector<std::complex<double>> h, int opts) {
 	int N = x.size();
-	auto X = fft(x, N, 0);
+	auto X = fft(x, N, opts);
 	for (int n = 0; n < N; n++) {
 		h[n] *= (1.0 / N);
 	}

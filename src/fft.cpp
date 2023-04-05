@@ -90,6 +90,11 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 			for (int n = 1; n < N - n; n++) {
 				x[N - n].x = x[n].x;
 			}
+		} else if (opts & FFT_ODD) {
+			for (int n = 1; n < N; n += 2) {
+				x[n].x = xin[n - 1];
+				x[n].y = xin[n];
+			}
 		} else {
 			for (int n = 0; n < N; n++) {
 				x[n].x = xin[2 * n];
@@ -142,6 +147,12 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 			xout.resize(N / 8);
 			for (int n = 0; n < xout.size(); n++) {
 				xout[n] = x[2 * n + 1].x;
+			}
+		} else if (opts & FFT_ODD) {
+			xout.resize(N);
+			for (int n = 0; n < N / 2; n++) {
+				xout[2 * n] = x[n].x;
+				xout[2 * n + 1] = x[n].y;
 			}
 		} else {
 			xout.resize(2 * N);
@@ -233,7 +244,14 @@ struct best_y {
 	int cnt;
 };
 
+void convolve_reset_cache();
+
 std::map<best_x2, int> best_methods;
+
+void fft_reset_cache() {
+	best_methods = decltype(best_methods)();
+	convolve_reset_cache();
+}
 
 std::string method_name(int i) {
 	std::string method;

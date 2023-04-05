@@ -12,6 +12,7 @@
 #define FFT_DST2 128
 #define FFT_DST3 256
 #define FFT_DST4 512
+#define FFT_ODD 1024
 
 std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts);
 std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts);
@@ -23,6 +24,7 @@ std::string method_name(int i);
 std::string get_best_method(int N, int opts);
 std::vector<cmplx> fft_raders_fast(std::vector<cmplx> xin, int N, int opts);
 std::vector<cmplx> fft_raders_fft(std::vector<cmplx> xin, int N, bool padded, int opts);
+void fft_reset_cache();
 
 void fft_reset();
 void print_fft_bests();

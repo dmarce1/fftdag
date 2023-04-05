@@ -57,7 +57,7 @@ std::vector<cmplx> fft_raders_fft(std::vector<cmplx> xin, int N, bool padded, in
 		}
 		x0 = fft(x0, L, opts);
 		x1 = fft(x1, L, opts);
-		x2 = convolve_fft(x2, b);
+		x2 = convolve_fft(x2, b, opts);
 		for (int k1 = 0; k1 < L; k1++) {
 			xout[P * k1] += x0[k1];
 		}
@@ -123,7 +123,7 @@ std::vector<cmplx> fft_raders_fast(std::vector<cmplx> xin, int N, int opts) {
 	}
 	x0 = fft(x0, L, opts);
 	x1 = fft(x1, L, opts);
-	x2 = convolve_fast(x2, b);
+	x2 = convolve_fast(x2, b, opts);
 	for (int k1 = 0; k1 < L; k1++) {
 		xout[P * k1] += x0[k1];
 	}
