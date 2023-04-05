@@ -120,7 +120,98 @@ polynomial<T> convolve_1d(const polynomial<T>& x, const polynomial<U>& h, int N)
 }
 
 template<class T, class U>
-std::vector<polynomial<U>> convolve_2d_p(const std::vector<polynomial<T>>& x0, const std::vector<polynomial<U>>& h0) {
+std::vector<polynomial<T>> convolve_2d_2t(const std::vector<polynomial<T>>& x0, const std::vector<polynomial<U>>& h0) {
+	using polyT = polynomial<T>;
+	using polyU = polynomial<U>;
+	int N = x0.size();
+	int t = ilogb(N);
+	if (t == 0) {
+		std::vector<polynomial<T>> rc;
+		polynomial<T> product;
+		product = x0[0] * h0[0];
+		rc.push_back(product);
+		return rc;
+	}
+	std::vector<polyT> x1(N);
+	std::vector<polyU> h1(N);
+	std::vector<polyU> h2(N);
+	std::vector<polyT> x2(N);
+	std::vector<polyU> h3(N / 2);
+	std::vector<polyT> x3(N / 2);
+	std::vector<polyU> h4(N / 2);
+	std::vector<polyT> x4(N / 2);
+	std::vector<polyU> h5(N / 2);
+	std::vector<polyT> x5(N / 2);
+	std::vector<polyT> y4k(N / 2);
+	std::vector<polyT> y2(N / 2);
+	std::vector<polyT> y0(N);
+	std::vector<polyT> y5k(N / 2);
+	std::vector<polyT> y1k(N);
+	polyU m, p1, p2;
+	polyT tx;
+	polyU th;
+	m[1 << t] = U(1);
+	m[0] = U(-1);
+	p1[1 << (t - 1)] = U(1);
+	p1[0] = U(+1);
+	p2[1 << (t - 1)] = U(1);
+	p2[0] = U(-1);
+	for (int n = 0; n < N; n++) {
+		x1[n] = x0[n] % p1;
+		h1[n] = h0[n] % p1;
+		x2[n] = x0[n] % p2;
+		h2[n] = h0[n] % p2;
+	}
+	auto x1k = polynomial_transform(x1, m, N);
+	auto h1k = polynomial_transform(h1, m, N);
+	for (int k = 0; k < N; k++) {
+		y1k[k] = x1k[k] * h1k[k];
+	}
+	auto y1 = inverse_polynomial_transform(y1k, m, N);
+	for (int n = 0; n < N / 2; n++) {
+		for (int m = 0; m < N; m++) {
+			h3[n][m] = h2[m][n];
+			x3[n][m] = x2[m][n];
+		}
+	}
+	for (int n = 0; n < N / 2; n++) {
+		x4[n] = x3[n] % p1;
+		x5[n] = x3[n] % p2;
+		h4[n] = h3[n] % p1;
+		h5[n] = h3[n] % p2;
+	}
+	auto x4k = polynomial_transform(x4, m, N / 2, 2);
+	auto h4k = polynomial_transform(h4, m, N / 2, 2);
+	for (int k = 0; k < N / 2; k++) {
+		y4k[k] = x4k[k] * h4k[k];
+	}
+	auto y4 = inverse_polynomial_transform(y4k, m, N / 2, 2);
+	auto y5 = convolve_2d_2t(x5, h5);
+	for (int n = 0; n < N / 2; n++) {
+		polyU t1 = (m / p1) % m;
+		polyU t2 = (m / p2) % m;
+		polyU s1 = (t1 * inverse(t1 % p1, p1)) % m;
+		polyU s2 = (t2 * inverse(t2 % p2, p2)) % m;
+		y2[n] = (y4[n] * s1 + y5[n] * s2) % m;
+	}
+	for (int n = 0; n < N / 2; n++) {
+		for (int l = 0; l < N; l++) {
+			y0[l][n] = y2[n][l];
+		}
+	}
+	for (int n = 0; n < N; n++) {
+		polyU t1 = (m / p1) % m;
+		polyU t2 = (m / p2) % m;
+		polyU s1 = (t1 * inverse(t1 % p1, p1)) % m;
+		polyU s2 = (t2 * inverse(t2 % p2, p2)) % m;
+		y0[n] = (y1[n] * s1 + y0[n] * s2) % m;
+	}
+	return y0;
+
+}
+
+template<class T, class U>
+std::vector<polynomial<T>> convolve_2d_p(const std::vector<polynomial<T>>& x0, const std::vector<polynomial<U>>& h0) {
 	using polyT = polynomial<T>;
 	using polyU = polynomial<U>;
 	int P = x0.size();
@@ -170,7 +261,7 @@ std::vector<polynomial<U>> convolve_2d_p(const std::vector<polynomial<T>>& x0, c
 }
 
 template<class T, class U>
-std::vector<polynomial<U>> convolve_2d_p2(const std::vector<polynomial<T>>& x0, const std::vector<polynomial<U>>& h0) {
+std::vector<polynomial<T>> convolve_2d_p2(const std::vector<polynomial<T>>& x0, const std::vector<polynomial<U>>& h0) {
 	using polyT = polynomial<T>;
 	using polyU = polynomial<U>;
 	int P2 = x0.size();
@@ -259,8 +350,8 @@ std::vector<polynomial<U>> convolve_2d_p2(const std::vector<polynomial<T>>& x0, 
 }
 
 void test_poly() {
-	constexpr int N1 = 9;
-	constexpr int N2 = 9;
+	constexpr int N1 = 16;
+	constexpr int N2 = 16;
 	polynomial<std::complex<double>> tx, th, ty0, ty1;
 	for (int n = 0; n < N1; n++) {
 		tx[n].real(rand1());
@@ -303,7 +394,7 @@ void test_poly() {
 			}
 		}
 	}
-	auto Y1 = convolve_2d_p2(X, H);
+	auto Y1 = convolve_2d_2t(X, H);
 	avg_err = 0.0;
 	for (int n1 = 0; n1 < N1; n1++) {
 		for (int n2 = 0; n2 < N2; n2++) {
