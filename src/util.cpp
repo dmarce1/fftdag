@@ -8,6 +8,7 @@
 #include <set>
 #include <complex>
 #include <fftw3.h>
+#include <fftw3.h>
 #include <cassert>
 
 std::map<int, int> prime_factorization(int N);

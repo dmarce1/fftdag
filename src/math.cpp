@@ -402,63 +402,43 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		nodes.push_back(math_vertex(d));
 	}
 	dags.clear();
-
-	/*std::queue<math_vertex> Q;
-	 for (auto i : inputs) {
-	 Q.push(i);
-	 }
-	 std::unordered_map<int, int> degree;
-	 std::unordered_map<int, std::vector<math_vertex>> output_map;
-	 for (auto n : nodes) {
-	 auto node = math_vertex(n);
-	 auto id = node.v.get_unique_id();
-	 degree[id] = node.get_edge_in_count();
-	 for (int j = 0; j < degree[id]; j++) {
-	 output_map[node.get_edge_in(j).get_unique_id()].push_back(node);
-	 }
-	 }
-	 nodes.resize(0);*/
-	std::stack<math_vertex> S;
-	std::unordered_set<int> visited;
-	std::map<int, math_vertex> goals;
+	std::unordered_map<int, int> count;
+	std::unordered_map<int, std::vector<math_vertex>> outmap;
+	inputs.clear();
 	for (auto n : nodes) {
 		auto node = math_vertex(n);
+		if (node.get_op() == CON || node.get_op() == IN) {
+			inputs.push_back(node);
+		}
 		auto id = node.get_unique_id();
-		if (node.v.properties().goal) {
-			goals[id] = node;
-			visited.insert(id);
-		}
-		if (node.get_op() == IN) {
-			visited.insert(id);
-		}
-	}
-	if (goals.size()) {
-		auto i = goals.end();
-		do {
-			i--;
-			S.push(i->second);
-		} while (i != goals.begin());
-	}
-	nodes.resize(0);
-	goals.clear();
-	while (S.size()) {
-		auto V = S.top();
-		bool flag = true;
-		for (int i = 0; i < V.get_edge_in_count(); i++) {
-			auto U = V.get_edge_in(i);
-			auto id = U.v.get_unique_id();
-			if (visited.find(id) == visited.end()) {
-				flag = false;
-				S.push(U);
-				visited.insert(id);
-			}
-		}
-		if (flag) {
-			nodes.push_back(V);
-			S.pop();
+		count[id] = node.get_edge_in_count();
+		for (int n = 0; n < count[id]; n++) {
+			auto id = node.get_edge_in(n).get_unique_id();
+			outmap[id].push_back(node);
 		}
 	}
 
+	std::vector<math_vertex> Q;
+	for (auto i : inputs) {
+		Q.push_back(i);
+	}
+	nodes.resize(0);
+	while (Q.size()) {
+		auto next = Q.back();
+		Q.pop_back();
+		nodes.push_back(next);
+		auto id = next.get_unique_id();
+		for (int n = 0; n < outmap[id].size(); n++) {
+			auto nid = outmap[id][n].get_unique_id();
+			assert(count[nid] != 0);
+			count[nid]--;
+			if (count[nid] == 0) {
+				Q.push_back(outmap[id][n]);
+			}
+		}
+
+	}
+	outmap.clear();
 	inputs.clear();
 
 	int index = 0;
@@ -468,7 +448,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			if (!(node.is_zero() || node.is_one() || node.is_neg_one())) {
 				std::string nm = std::string("c") + std::to_string(index++);
 				char* ptr;
-				asprintf(&ptr, "\tconstexpr double %s = %.17e;\n", nm.c_str(), node.v.properties().value);
+				asprintf(&ptr, "\tconstexpr fft_type %s = %.17e;\n", nm.c_str(), node.v.properties().value);
 				code += ptr;
 				free(ptr);
 				node.v.properties().name = std::make_shared<std::string>(nm);
