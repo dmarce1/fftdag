@@ -68,12 +68,36 @@ template<class T, class U>
 std::vector<polynomial<T>> polynomial_transform(const std::vector<polynomial<T>>& xn, polynomial<U> m, int P, int r = 1) {
 	using polyT = polynomial<T>;
 	using polyU = polynomial<U>;
-	std::vector<polyT> xk(P);
-	for (int k = 0; k < P; k++) {
-		for (int n = 0; n < P; n++) {
-			polyU w;
-			w[r * n * k] = U(1);
-			xk[k] += (xn[n] * w) % m;
+	int N = xn.size();
+	std::vector<polyT> xk(N);
+	if (N <= 2 || N % 2 != 0) {
+		using polyT = polynomial<T>;
+		using polyU = polynomial<U>;
+		for (int k = 0; k < N; k++) {
+			for (int n = 0; n < N; n++) {
+				polyU w;
+				w[r * n * k] = U(1);
+				xk[k] += (xn[n] * w) % m;
+			}
+		}
+	} else {
+		std::vector<polyT> xe(N / 2);
+		std::vector<polyT> xo(N / 2);
+		for (int n = 0; n < N / 2; n++) {
+			xe[n] = xn[2 * n];
+			xo[n] = xn[2 * n + 1];
+		}
+		xe = polynomial_transform(xe, m, N / 2, 2 * r);
+		xo = polynomial_transform(xo, m, N / 2, 2 * r);
+		for (int k = 0; k < N / 2; k++) {
+			poly w1;
+			poly w2;
+			w1[k * r] = T(1);
+			w1 = w1 % m;
+			w2[(k + N / 2) * r] = T(1);
+			w2 = w2 % m;
+			xk[k] = (xe[k] + w1 * xo[k]) % m;
+			xk[k + N / 2] = (xe[k] + w2 * xo[k]) % m;
 		}
 	}
 	return xk;
@@ -350,8 +374,8 @@ std::vector<polynomial<T>> convolve_2d_p2(const std::vector<polynomial<T>>& x0, 
 }
 
 void test_poly() {
-	constexpr int N1 = 16;
-	constexpr int N2 = 16;
+	constexpr int N1 = 8;
+	constexpr int N2 = 8;
 	polynomial<std::complex<double>> tx, th, ty0, ty1;
 	for (int n = 0; n < N1; n++) {
 		tx[n].real(rand1());
