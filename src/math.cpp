@@ -468,7 +468,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			if (!(node.is_zero() || node.is_one() || node.is_neg_one())) {
 				std::string nm = std::string("c") + std::to_string(index++);
 				char* ptr;
-				asprintf(&ptr, "\tconstexpr double %s = %.17e;\n", nm.c_str(), node.v.properties().value);
+				asprintf(&ptr, "\tconst T %s = %.17e;\n", nm.c_str(), node.v.properties().value);
 				code += ptr;
 				free(ptr);
 				node.v.properties().name = std::make_shared<std::string>(nm);
