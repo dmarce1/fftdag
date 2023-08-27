@@ -19,7 +19,7 @@
 #include <stack>
 
 typedef enum {
-	ADD, SUB, NEG, MUL, IN, CON, INVALID
+	SUB, NEG, MUL, IN, CON, ADD, INVALID
 } operation_t;
 
 bool is_arithmetic(operation_t op);

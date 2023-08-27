@@ -580,6 +580,8 @@ std::vector<T> convolve_toom(int R, std::vector<T> x, std::vector<V> h) {
 }
 
 bool can_agarwal(int N) {
+
+
 	auto pfacs = prime_factorization(N);
 	if (pfacs.size() > 1) {
 		for (auto fac : pfacs) {

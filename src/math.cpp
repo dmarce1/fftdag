@@ -2,6 +2,7 @@
 #include "util.hpp"
 
 #include <algorithm>
+#include <numeric>
 #include <queue>
 
 bool is_additive(operation_t op) {
@@ -97,19 +98,14 @@ std::unordered_map<std::string, std::string> reg2mem;
 std::queue<std::string> regq;
 int regcnt = 0;
 
-std::string clear_registers() {
-	std::string rc;
-	for (auto i = reg2mem.begin(); i != reg2mem.end(); i++) {
-		rc += std::string("               vmovupd        ") + i->first + ", " + i->second + "\n";
-	}
+void clear_registers() {
 	mem2reg.clear();
 	reg2mem.clear();
 	regq = decltype(regq)();
 	regcnt = 0;
-	return rc;
 }
 
-std::pair<std::string, std::string> get_register(std::string mem, bool noload = false) {
+std::pair<std::string, std::string> get_register(std::string mem, bool noload, std::set<std::string> onlystore = std::set<std::string>()) {
 	std::pair<std::string, std::string> rc;
 	std::string& reg = rc.first;
 	if (mem2reg.find(mem) == mem2reg.end()) {
@@ -123,7 +119,9 @@ std::pair<std::string, std::string> get_register(std::string mem, bool noload = 
 		regq.pop();
 		if (reg2mem.find(reg) != reg2mem.end()) {
 			if (reg2mem[reg][0] != 'C') {
-				rc.second = std::string("               vmovupd        ") + reg + ", " + reg2mem[reg] + "\n";
+				if (onlystore.find(reg2mem[reg]) == onlystore.end() || onlystore.size() == 0) {
+					rc.second = std::string("               vmovupd        ") + reg + ", " + reg2mem[reg] + "\n";
+				}
 			}
 			mem2reg.erase(reg2mem[reg]);
 			reg2mem.erase(reg);
@@ -138,53 +136,6 @@ std::pair<std::string, std::string> get_register(std::string mem, bool noload = 
 		reg = mem2reg[mem];
 	}
 	return rc;
-}
-
-std::string math_vertex::properties::print_code(const std::vector<math_vertex>& edges) {
-	std::string code;
-//	if (out_num != -1) {
-//		std::string nm = std::string("x[") + std::to_string(out_num) + std::string("]");
-//		auto tmp = names->reserve_name(std::move(nm));
-//		name = tmp.first;
-//		code += tmp.second;
-	if (name == nullptr) {
-		assert(names != nullptr);
-		name = names->generate_name();
-	}
-	if (is_arithmetic(op)) {
-		const auto a = get_register(*name, true);
-		const auto b = get_register(*edges[0].v.properties().name);
-//		const auto c = get_register(*edges[op == NEG ? 0 : 1].v.properties().name);
-		const auto A = a.first;
-		const auto B = b.first;
-		const auto C = *edges[op == NEG ? 0 : 1].v.properties().name;
-		char* ptr;
-		if (a.second != "") {
-			code += a.second;
-		}
-		if (b.second != "") {
-			code += b.second;
-		}
-		switch (op) {
-		case ADD:
-			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vaddpd", C.c_str(), B.c_str(), A.c_str());
-			break;
-		case SUB:
-			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", C.c_str(), B.c_str(), A.c_str());
-			break;
-		case MUL:
-			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", C.c_str(), B.c_str(), A.c_str());
-			break;
-		case NEG:
-			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", "NEGONE", B.c_str(), A.c_str());
-			break;
-		default:
-			break;
-		}
-		code += ptr;
-		free(ptr);
-	}
-	return code;
 }
 
 void math_vertex::replace_edge(const math_vertex& a, math_vertex&& b) {
@@ -421,15 +372,42 @@ int math_vertex::get_group_id() const {
 }
 
 std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs) {
+	clear_registers();
 	std::string code;
 	int ncnt = 5;
 	std::pair<std::string, int> rc;
+	std::vector<std::string> onames;
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n].v.properties().out_num = n;
 		outputs[n].set_goal();
 	}
 	auto db = outputs[0].v.properties().names;
 
+	std::string loads;
+	for (int i = 0; i < inputs.size(); i++) {
+		auto reg = get_register(*inputs[i].v.properties().name, true);
+		onames.push_back(std::to_string(-32 * (1 + i)) + std::string("(%ebp)"));
+		loads += reg.second;
+		char* ptr;
+		const char* basename = i % 2 == 0 ? "%rdi" : "%rsi";
+		if (i == 0) {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ")").c_str(), reg.first.c_str());
+			loads += ptr;
+			free(ptr);
+		} else {
+			static bool sw = true;
+			const char* snm = sw ? "%rax" : "%r8";
+			sw = !sw;
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(4 * i)).c_str(), "%rdx", snm);
+			loads += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + snm + ", 8)").c_str(), reg.first.c_str());
+
+			loads += ptr;
+			free(ptr);
+		}
+
+	}
 	dag_vertex<properties>::executor exe;
 	std::vector<math_vertex::weak_ref> nodes;
 	std::vector<dag_vertex<properties>> dags;
@@ -443,21 +421,6 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	}
 	dags.clear();
 
-	/*std::queue<math_vertex> Q;
-	 for (auto i : inputs) {
-	 Q.push(i);
-	 }
-	 std::unordered_map<int, int> degree;
-	 std::unordered_map<int, std::vector<math_vertex>> output_map;
-	 for (auto n : nodes) {
-	 auto node = math_vertex(n);
-	 auto id = node.v.get_unique_id();
-	 degree[id] = node.get_edge_in_count();
-	 for (int j = 0; j < degree[id]; j++) {
-	 output_map[node.get_edge_in(j).get_unique_id()].push_back(node);
-	 }
-	 }
-	 nodes.resize(0);*/
 	std::stack<math_vertex> S;
 	std::unordered_set<int> visited;
 	std::map<int, math_vertex> goals;
@@ -502,14 +465,38 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	inputs.clear();
 
 	int index = 0;
+	std::string constants;
+	std::string nm = std::string("NEG_ONE");
+	char* ptr;
+	asprintf(&ptr, "%-15s%-15s%-25.17e\n", (nm + ":").c_str(), ".double", -1.0);
+	constants += ptr;
+	free(ptr);
+	asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -1.0);
+	constants += ptr;
+	free(ptr);
+	asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -1.0);
+	constants += ptr;
+	free(ptr);
+	asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -1.0);
+	constants += ptr;
+	free(ptr);
 	for (auto n : nodes) {
 		auto node = math_vertex(n);
 		if (node.get_op() == CON && done.find(node) == done.end()) {
 			if (!(node.is_zero() || node.is_one() || node.is_neg_one())) {
 				std::string nm = std::string("C") + std::to_string(index++);
 				char* ptr;
-				asprintf(&ptr, "\tconst T %s = %.17e;\n", nm.c_str(), node.v.properties().value);
-				code += ptr;
+				asprintf(&ptr, "%-15s%-15s%-25.17e\n", (nm + ":").c_str(), ".double", node.v.properties().value);
+				constants += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", node.v.properties().value);
+				constants += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", node.v.properties().value);
+				constants += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", node.v.properties().value);
+				constants += ptr;
 				free(ptr);
 				node.v.properties().name = std::make_shared<std::string>(nm);
 			}
@@ -537,9 +524,39 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		v.v.free_edges();
 		done.insert(v);
 	}
+	std::vector<int> sorted(onames.size());
+	std::iota(sorted.begin(), sorted.end(), 0);
+	std::sort(sorted.begin(), sorted.end(), [&](int i, int j) {
+		auto a = onames[i];
+		auto b = onames[j];
+		return mem2reg.find(a) != mem2reg.end() && mem2reg.find(b) == mem2reg.end();
+	});
+	std::set<std::string> onlystore(onames.begin(), onames.end());
+	for (int k = 0; k < onames.size(); k++) {
+		const int i = sorted[k];
+		char* ptr;
+		auto reg = get_register(onames[i], false, onlystore);
+		code += reg.second;
+		const char* basename = i % 2 == 0 ? "%rdi" : "%rsi";
+		static bool sw = false;
+		sw = !sw;
+		const char* snm = sw ? "%rax" : "%r8";
+		std::string memloc;
+		if (i == 0) {
+			memloc = std::string("(") + basename + ")";
+		} else {
+			memloc = std::string("(") + basename + ", " + snm + ", 8)";
+		}
+		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(4 * i)).c_str(), "%rdx", snm);
+		code += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", reg.first.c_str(), memloc.c_str());
+		code += ptr;
+		free(ptr);
+	}
 
 	auto decls = db->get_declarations();
-	code = decls + code;
+	code = decls + loads + code;
 	rc.first = code;
 	rc.second = 0;
 	for (int i = 0; i < decls.size(); i++) {
@@ -547,8 +564,61 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			rc.second++;
 		}
 	}
-	rc.first += clear_registers();
+	//rc.first += clear_registers();
+	rc.first += "               ret\n";
+	rc.first += "               .align         32\n";
+	rc.first += constants;
 	return std::move(rc);
+}
+
+std::string math_vertex::properties::print_code(const std::vector<math_vertex>& edges) {
+	std::string code;
+//	if (out_num != -1) {
+//		std::string nm = std::string("x[") + std::to_string(out_num) + std::string("]");
+//		auto tmp = names->reserve_name(std::move(nm));
+//		name = tmp.first;
+//		code += tmp.second;
+	if (name == nullptr) {
+		assert(names != nullptr);
+		name = names->generate_name();
+	}
+	if (is_arithmetic(op)) {
+		const auto a = get_register(*name, true);
+		const auto b = get_register(*edges[0].v.properties().name, false);
+//		const auto c = get_register(*edges[op == NEG ? 0 : 1].v.properties().name);
+		const auto A = a.first;
+		const auto B = b.first;
+		auto C = *edges[op == NEG ? 0 : 1].v.properties().name;
+		if (mem2reg.find(C) != mem2reg.end()) {
+			C = mem2reg[C];
+		}
+		char* ptr;
+		if (a.second != "") {
+			code += a.second;
+		}
+		if (b.second != "") {
+			code += b.second;
+		}
+		switch (op) {
+		case ADD:
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vaddpd", C.c_str(), B.c_str(), A.c_str());
+			break;
+		case SUB:
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", C.c_str(), B.c_str(), A.c_str());
+			break;
+		case MUL:
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", C.c_str(), B.c_str(), A.c_str());
+			break;
+		case NEG:
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", "NEG_ONE", B.c_str(), A.c_str());
+			break;
+		default:
+			break;
+		}
+		code += ptr;
+		free(ptr);
+	}
+	return code;
 }
 
 math_vertex::math_vertex(const dag_vertex<properties>& v0) {
@@ -785,7 +855,9 @@ math_vertex math_vertex::optimize() {
 		}
 		break;
 	case MUL:
-		if (a.is_constant() && b.is_constant()) {
+		if (a.is_constant() && !b.is_constant()) {
+			return b * a;
+		} else if (a.is_constant() && b.is_constant()) {
 			c = math_vertex(a.get_value() * b.get_value());
 			flag = true;
 			opt = 15;
@@ -814,7 +886,7 @@ math_vertex math_vertex::optimize() {
 			flag = true;
 			opt = 21;
 		} else if (b.is_neg()) {
-			c = -(a * b.get_neg());
+			c = -(b.get_neg() * a);
 			flag = true;
 			opt = 22;
 		} else if (a.is_neg()) {
@@ -825,8 +897,8 @@ math_vertex math_vertex::optimize() {
 		break;
 	case NEG:
 		if (a.is_neg()) {
-			c = a.get_neg();
-			flag = true;
+			//		c = a.get_neg();
+			//		flag = true;
 			opt = 24;
 		}
 		break;

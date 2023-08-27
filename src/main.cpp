@@ -8,7 +8,7 @@
 #include <time.h>
 
 constexpr int Nmin = 2;
-constexpr int Nmax = 16;
+constexpr int Nmax = 32;
 void test_poly();
 //#define USE_DCT
 double rand1() {
@@ -49,6 +49,15 @@ int gcd(int a, int b) {
 	return std::max(a, b);
 }
 
+std::string apply_header(std::string code, std::string name) {
+	std::string rc;
+	rc += std::string("               .global        ") + name + "\n";
+	rc += std::string("               .text        ");
+	rc += "\n" + name + ":\n";
+	rc += code;
+	return rc;
+}
+
 int main(int argc, char **argv) {
 	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 	int cnt1 = 0;
@@ -62,16 +71,9 @@ int main(int argc, char **argv) {
 		auto cnt = math_vertex::operation_count(outputs);
 		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
 		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		std::string code;
-		auto code1 = tmp.first;
-		std::string fname = "fft.complex." + std::to_string(N) + ".cpp";
+		std::string code = apply_header(tmp.first, std::string("fft_kernel_complex") + std::to_string(N));
+		std::string fname = "fft.complex." + std::to_string(N) + ".S";
 		FILE* fp = fopen(fname.c_str(), "wt");
-		code = "#include \"types.hpp\"\n\n";
-		code += "template<class T>\n";
-		code += std::string("void fft_complex_exe_") + std::to_string(N) + "(T* x) {\n" + code1 + "}\n\n";
-		code += std::string("\n\nvoid fft_complex_") + std::to_string(N) + "(double* x) {\n" + std::string("\treturn fft_complex_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
-		code += std::string("\n\nvoid fft_complex_simd2_") + std::to_string(N) + "(fft_simd2* x) {\n" + std::string("\treturn fft_complex_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
-		code += std::string("\n\nvoid fft_complex_simd4_") + std::to_string(N) + "(fft_simd4* x) {\n" + std::string("\treturn fft_complex_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;
@@ -86,44 +88,34 @@ int main(int argc, char **argv) {
 		auto cnt = math_vertex::operation_count(outputs);
 		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
 		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		std::string code;
-		auto code1 = tmp.first;
-		std::string fname = "fft.real." + std::to_string(N) + ".cpp";
+		std::string code = apply_header(tmp.first, std::string("fft_kernel_real") + std::to_string(N));
+		std::string fname = "fft.real." + std::to_string(N) + ".S";
 		FILE* fp = fopen(fname.c_str(), "wt");
-		code = "#include \"types.hpp\"\n\n";
-		code += "template<class T>\n";
-		code += std::string("void fft_real_exe_") + std::to_string(N) + "(T* x) {\n" + code1 + "}\n\n";
-		code += std::string("\n\nvoid fft_real_") + std::to_string(N) + "(double* x) {\n" + std::string("\treturn fft_real_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
-		code += std::string("\n\nvoid fft_real_simd2_") + std::to_string(N) + "(fft_simd2* x) {\n" + std::string("\treturn fft_real_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
-		code += std::string("\n\nvoid fft_real_simd4_") + std::to_string(N) + "(fft_simd4* x) {\n" + std::string("\treturn fft_real_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
 		cnt1 += tmp.second;
 		cnt2 += cnt.total();
 	}
 	fft_reset_cache();
-	fprintf( stderr, "------------------------------REAL INVERSE-------------------------\n");
-	for (int N = Nmin; N <= Nmax; N++) {
-		auto inputs = math_vertex::new_inputs(N);
-		auto outputs = fft(inputs, N, FFT_REAL | FFT_INV);
-		auto cnt = math_vertex::operation_count(outputs);
-		auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
-		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL | FFT_INV).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		std::string code;
-		auto code1 = tmp.first;
-		std::string fname = "fft.real_inv." + std::to_string(N) + ".cpp";
-		FILE* fp = fopen(fname.c_str(), "wt");
-		code = "#include \"types.hpp\"\n\n";
-		code += "template<class T>\n";
-		code += std::string("void fft_real_inv_exe_") + std::to_string(N) + "(T* x) {\n" + code1 + "}\n\n";
-		code += std::string("\n\nvoid fft_real_inv_") + std::to_string(N) + "(double* x) {\n" + std::string("\treturn fft_real_inv_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
-		code += std::string("\n\nvoid fft_real_inv_simd2_") + std::to_string(N) + "(fft_simd2* x) {\n" + std::string("\treturn fft_real_inv_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
-		code += std::string("\n\nvoid fft_real_inv_simd4_") + std::to_string(N) + "(fft_simd4* x) {\n" + std::string("\treturn fft_real_inv_exe_") + std::to_string(N) + std::string("(x);\n") + "}\n\n";
-		fprintf(fp, "%s\n", code.c_str());
-		fclose(fp);
-		cnt1 += tmp.second;
-		cnt2 += cnt.total();
-	}
+	/*	fprintf( stderr, "------------------------------REAL INVERSE-------------------------\n");
+	 for (int N = Nmin; N <= Nmax; N++) {
+	 auto inputs = math_vertex::new_inputs(N);
+	 auto outputs = fft(inputs, N, FFT_REAL | FFT_INV);
+	 auto cnt = math_vertex::operation_count(outputs);
+	 auto tmp = math_vertex::execute_all(std::move(inputs), outputs);
+	 fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL | FFT_INV).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+	 std::string code;
+	 code += std::string("               .global        ") + "fft_kernel_complex_" + std::to_string(N) + "\n";
+	 code += "\nfft_kernel_complex_" + std::to_string(N) + ":\n";
+	 code += tmp.first;
+	 std::string fname = "fft.real_inv." + std::to_string(N) + ".S";
+	 FILE* fp = fopen(fname.c_str(), "wt");
+	 code = "#include \"types.hpp\"\n\n";
+	 fprintf(fp, "%s\n", code.c_str());
+	 fclose(fp);
+	 cnt1 += tmp.second;
+	 cnt2 += cnt.total();
+	 }*/
 	fprintf( stderr, "O: %i D: %i\n", cnt2, cnt1);
 	system("cp ../../gen_src/main.cpp .\n");
 	system("cp ../../gen_src/test.cpp .\n");
