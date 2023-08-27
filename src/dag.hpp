@@ -17,6 +17,9 @@
 #include <vector>
 #include <cmath>
 
+#define FFT_NMIN 2
+#define FFT_NMAX 32
+
 template<class Properties>
 class dag_vertex {
 public:

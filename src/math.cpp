@@ -92,50 +92,91 @@ bool math_vertex::valid() const {
 	return v.valid();
 }
 
+std::unordered_map<std::string, std::string> mem2reg;
+std::unordered_map<std::string, std::string> reg2mem;
+std::queue<std::string> regq;
+int regcnt = 0;
+
+std::string clear_registers() {
+	std::string rc;
+	for (auto i = reg2mem.begin(); i != reg2mem.end(); i++) {
+		rc += std::string("               vmovupd        ") + i->first + ", " + i->second + "\n";
+	}
+	mem2reg.clear();
+	reg2mem.clear();
+	regq = decltype(regq)();
+	regcnt = 0;
+	return rc;
+}
+
+std::pair<std::string, std::string> get_register(std::string mem, bool noload = false) {
+	std::pair<std::string, std::string> rc;
+	std::string& reg = rc.first;
+	if (mem2reg.find(mem) == mem2reg.end()) {
+		if (regcnt < 16) {
+			regcnt = 16;
+			for (int n = 0; n < 16; n++) {
+				regq.push(std::string("%ymm") + std::to_string(n));
+			}
+		}
+		reg = regq.front();
+		regq.pop();
+		if (reg2mem.find(reg) != reg2mem.end()) {
+			if (reg2mem[reg][0] != 'C') {
+				rc.second = std::string("               vmovupd        ") + reg + ", " + reg2mem[reg] + "\n";
+			}
+			mem2reg.erase(reg2mem[reg]);
+			reg2mem.erase(reg);
+		}
+		reg2mem[reg] = mem;
+		mem2reg[mem] = reg;
+		regq.push(reg);
+		if (!noload) {
+			rc.second += std::string("               vmovupd        ") + reg2mem[reg] + ", " + reg + "\n";
+		}
+	} else {
+		reg = mem2reg[mem];
+	}
+	return rc;
+}
+
 std::string math_vertex::properties::print_code(const std::vector<math_vertex>& edges) {
 	std::string code;
-	if (out_num != -1) {
-		std::string nm = std::string("x[") + std::to_string(out_num) + std::string("]");
-		auto tmp = names->reserve_name(std::move(nm));
-		name = tmp.first;
-		code += tmp.second;
-	} else if (name == nullptr) {
+//	if (out_num != -1) {
+//		std::string nm = std::string("x[") + std::to_string(out_num) + std::string("]");
+//		auto tmp = names->reserve_name(std::move(nm));
+//		name = tmp.first;
+//		code += tmp.second;
+	if (name == nullptr) {
 		assert(names != nullptr);
 		name = names->generate_name();
 	}
 	if (is_arithmetic(op)) {
-		const auto& A = *name;
-		const auto& B = *edges[0].v.properties().name;
-		const auto& C = *edges[op == NEG ? 0 : 1].v.properties().name;
+		const auto a = get_register(*name, true);
+		const auto b = get_register(*edges[0].v.properties().name);
+//		const auto c = get_register(*edges[op == NEG ? 0 : 1].v.properties().name);
+		const auto A = a.first;
+		const auto B = b.first;
+		const auto C = *edges[op == NEG ? 0 : 1].v.properties().name;
 		char* ptr;
+		if (a.second != "") {
+			code += a.second;
+		}
+		if (b.second != "") {
+			code += b.second;
+		}
 		switch (op) {
 		case ADD:
-			if (A == B) {
-				asprintf(&ptr, "\t%s += %s;\n", A.c_str(), C.c_str());
-			} else if (A == C) {
-				asprintf(&ptr, "\t%s += %s;\n", A.c_str(), B.c_str());
-			} else {
-				asprintf(&ptr, "\t%s = %s + %s;\n", A.c_str(), B.c_str(), C.c_str());
-			}
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vaddpd", C.c_str(), B.c_str(), A.c_str());
 			break;
 		case SUB:
-			if (A == B) {
-				asprintf(&ptr, "\t%s -= %s;\n", A.c_str(), C.c_str());
-			} else {
-				asprintf(&ptr, "\t%s = %s - %s;\n", A.c_str(), B.c_str(), C.c_str());
-			}
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", C.c_str(), B.c_str(), A.c_str());
 			break;
 		case MUL:
-			if (A == B) {
-				asprintf(&ptr, "\t%s *= %s;\n", A.c_str(), C.c_str());
-			} else if (A == C) {
-				asprintf(&ptr, "\t%s *= %s;\n", A.c_str(), B.c_str());
-			} else {
-				asprintf(&ptr, "\t%s = %s * %s;\n", A.c_str(), B.c_str(), C.c_str());
-			}
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", C.c_str(), B.c_str(), A.c_str());
 			break;
 		case NEG:
-			asprintf(&ptr, "\t%s = -%s;\n", A.c_str(), B.c_str());
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", "NEGONE", B.c_str(), A.c_str());
 			break;
 		default:
 			break;
@@ -235,13 +276,12 @@ math_vertex& math_vertex::operator=(double constant) {
 	return *this;
 }
 
-math_vertex math_vertex::new_input(std::shared_ptr<name_server> db, std::string&& name) {
+math_vertex math_vertex::new_input(std::shared_ptr<name_server> db) {
 	properties props;
 	math_vertex C;
 	props.op = IN;
-	auto tmp = db->reserve_name(std::move(name));
-	props.name = tmp.first;
-	assert(tmp.second == "");
+	auto tmp = db->generate_name();
+	props.name = tmp;
 	props.names = db;
 	C.v = dag_vertex<properties>::new_(std::move(props));
 	return C;
@@ -251,7 +291,7 @@ std::vector<math_vertex> math_vertex::new_inputs(int cnt) {
 	std::vector<math_vertex> inputs;
 	auto db = std::make_shared<name_server>();
 	for (int i = 0; i < cnt; i++) {
-		inputs.push_back(new_input(db, "x[" + std::to_string(i) + "]"));
+		inputs.push_back(new_input(db));
 	}
 	return inputs;
 }
@@ -466,7 +506,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		auto node = math_vertex(n);
 		if (node.get_op() == CON && done.find(node) == done.end()) {
 			if (!(node.is_zero() || node.is_one() || node.is_neg_one())) {
-				std::string nm = std::string("c") + std::to_string(index++);
+				std::string nm = std::string("C") + std::to_string(index++);
 				char* ptr;
 				asprintf(&ptr, "\tconst T %s = %.17e;\n", nm.c_str(), node.v.properties().value);
 				code += ptr;
@@ -507,6 +547,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			rc.second++;
 		}
 	}
+	rc.first += clear_registers();
 	return std::move(rc);
 }
 

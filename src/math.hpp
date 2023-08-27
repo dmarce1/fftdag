@@ -145,7 +145,7 @@ public:
 	static std::vector<math_vertex> available2execute(dag_vertex<properties>::executor& exe, dag_vertex<properties>::executor& exe1, std::vector<math_vertex>&);
 	std::vector<math_vertex> available2execute(dag_vertex<properties>::executor& exe, dag_vertex<properties>::executor& exe1);
 	std::string execute(dag_vertex<properties>::executor& exe);
-	static math_vertex new_input(std::shared_ptr<name_server> db, std::string&& name);
+	static math_vertex new_input(std::shared_ptr<name_server> db);
 	static op_cnt_t operation_count(std::vector<math_vertex>);
 	static op_cnt_t operation_count(std::vector<cmplx>);
 	static std::vector<math_vertex> new_inputs(int cnt);
