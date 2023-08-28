@@ -17,6 +17,11 @@ bool is_additive(operation_t op) {
 
 int edge_count(operation_t op) {
 	switch (op) {
+	case FMA:
+	case FMS:
+	case NFMA:
+	case NFMS:
+		return 3;
 	case ADD:
 	case SUB:
 	case MUL:
@@ -108,6 +113,10 @@ void clear_registers() {
 std::pair<std::string, std::string> get_register(std::string mem, bool noload, std::set<std::string> onlystore = std::set<std::string>()) {
 	std::pair<std::string, std::string> rc;
 	std::string& reg = rc.first;
+	if (mem[0] == '%') {
+		reg = mem;
+		return rc;
+	}
 	if (mem2reg.find(mem) == mem2reg.end()) {
 		if (regcnt < 16) {
 			regcnt = 16;
@@ -117,6 +126,9 @@ std::pair<std::string, std::string> get_register(std::string mem, bool noload, s
 		}
 		reg = regq.front();
 		regq.pop();
+		if (mem2reg.find(mem) != mem2reg.end()) {
+			assert(mem2reg[mem][0] == '%');
+		}
 		if (reg2mem.find(reg) != reg2mem.end()) {
 			if (reg2mem[reg][0] != 'C') {
 				if (onlystore.find(reg2mem[reg]) == onlystore.end() || onlystore.size() == 0) {
@@ -134,6 +146,9 @@ std::pair<std::string, std::string> get_register(std::string mem, bool noload, s
 		}
 	} else {
 		reg = mem2reg[mem];
+	}
+	if (reg2mem.find(reg) != reg2mem.end()) {
+		assert(reg2mem[reg][0] != '%');
 	}
 	return rc;
 }
@@ -267,6 +282,9 @@ math_vertex operator*(const math_vertex& A, const math_vertex& B) {
 
 math_vertex operator-(const math_vertex& A) {
 	assert(A.valid());
+	if (A.v.properties().op == NEG) {
+		return math_vertex(A.v.get_edge_in(0));
+	}
 	return math_vertex::unary_op(NEG, A);
 }
 
@@ -371,13 +389,14 @@ int math_vertex::get_group_id() const {
 	return v.properties().group_id;
 }
 
-std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs) {
+std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, int simdsz) {
 	clear_registers();
 	std::string code;
 	int ncnt = 5;
 	std::pair<std::string, int> rc;
 	std::vector<std::string> onames;
 	for (int n = 0; n < outputs.size(); n++) {
+		outputs[n] = outputs[n].optimize_fma();
 		outputs[n].v.properties().out_num = n;
 		outputs[n].set_goal();
 	}
@@ -389,18 +408,29 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		onames.push_back(std::to_string(-32 * (1 + i)) + std::string("(%ebp)"));
 		loads += reg.second;
 		char* ptr;
-		const char* basename = i % 2 == 0 ? "%rdi" : "%rsi";
+		const char* basename = !cmplx ? "%rdi" : (i % 2 == 0 ? "%rdi" : "%rsi");
+		const char* stride = !cmplx ? "%rsi" : (i % 2 == 0 ? "%r8" : "%r9");
 		if (i == 0) {
 			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ")").c_str(), reg.first.c_str());
 			loads += ptr;
 			free(ptr);
 		} else {
 			static bool sw = true;
-			const char* snm = sw ? "%rax" : "%r8";
+			const char* snm = sw ? "%rax" : "%r10";
 			sw = !sw;
-			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(4 * i)).c_str(), "%rdx", snm);
-			loads += ptr;
-			free(ptr);
+			int index = cmplx ? 4 * (i / 2) : 4 * i;
+			if (index < 128) {
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, snm);
+				loads += ptr;
+				free(ptr);
+			} else {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", (std::string("$") + std::to_string(index)).c_str(), snm);
+				loads += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "imul", stride, snm);
+				loads += ptr;
+				free(ptr);
+			}
 			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + snm + ", 8)").c_str(), reg.first.c_str());
 
 			loads += ptr;
@@ -411,75 +441,41 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	dag_vertex<properties>::executor exe;
 	std::vector<math_vertex::weak_ref> nodes;
 	std::vector<dag_vertex<properties>> dags;
+	dags = decltype(dags)();
 	for (auto o : outputs) {
 		dags.push_back(o.v);
 	}
+	bool hasneg = false;
 	dags = dag_vertex<properties>::sort(exe, dags);
 	std::set<math_vertex::weak_ref> done;
 	for (auto d : dags) {
 		nodes.push_back(math_vertex(d));
+		if (math_vertex(nodes.back()).get_op() == NEG) {
+			hasneg = true;
+		}
 	}
 	dags.clear();
-
-	std::stack<math_vertex> S;
-	std::unordered_set<int> visited;
-	std::map<int, math_vertex> goals;
-	for (auto n : nodes) {
-		auto node = math_vertex(n);
-		auto id = node.get_unique_id();
-		if (node.v.properties().goal) {
-			goals[id] = node;
-			visited.insert(id);
-		}
-		if (node.get_op() == IN) {
-			visited.insert(id);
-		}
-	}
-	if (goals.size()) {
-		auto i = goals.end();
-		do {
-			i--;
-			S.push(i->second);
-		} while (i != goals.begin());
-	}
-	nodes.resize(0);
-	goals.clear();
-	while (S.size()) {
-		auto V = S.top();
-		bool flag = true;
-		for (int i = 0; i < V.get_edge_in_count(); i++) {
-			auto U = V.get_edge_in(i);
-			auto id = U.v.get_unique_id();
-			if (visited.find(id) == visited.end()) {
-				flag = false;
-				S.push(U);
-				visited.insert(id);
-			}
-		}
-		if (flag) {
-			nodes.push_back(V);
-			S.pop();
-		}
-	}
 
 	inputs.clear();
 
 	int index = 0;
 	std::string constants;
-	std::string nm = std::string("NEG_ONE");
-	char* ptr;
-	asprintf(&ptr, "%-15s%-15s%-25.17e\n", (nm + ":").c_str(), ".double", -1.0);
-	constants += ptr;
-	free(ptr);
-	asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -1.0);
-	constants += ptr;
-	free(ptr);
-	asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -1.0);
-	constants += ptr;
-	free(ptr);
-	asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -1.0);
-	constants += ptr;
-	free(ptr);
+	if (hasneg) {
+		std::string nm = std::string("CZ");
+		char* ptr;
+		asprintf(&ptr, "%-15s%-15s%-25.17e\n", (nm + ":").c_str(), ".double", -0.0);
+		constants += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -0.0);
+		constants += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -0.0);
+		constants += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -0.0);
+		constants += ptr;
+		free(ptr);
+	}
 	for (auto n : nodes) {
 		auto node = math_vertex(n);
 		if (node.get_op() == CON && done.find(node) == done.end()) {
@@ -509,16 +505,28 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			continue;
 		}
 		int ncnt = v.get_edge_in_count();
+		std::vector<std::string> killnames;
 		for (int j = 0; j < ncnt; j++) {
 			auto edge = v.get_edge_in(j);
 			if (edge.v.use_count() <= 2 && !edge.is_constant()) {
+				if (v.v.properties().name != nullptr) {
+					killnames.push_back(*v.v.properties().name);
+				}
 				v.v.properties().name = edge.v.properties().name;
 				break;
+			}
+		}
+		for (auto k : killnames) {
+			if (mem2reg.find(k) != mem2reg.end()) {
+				reg2mem.erase(mem2reg[k]);
+				mem2reg.erase(k);
 			}
 		}
 		std::vector<math_vertex> in;
 		for (int k = 0; k < v.get_edge_in_count(); k++) {
 			in.push_back(v.get_edge_in(k));
+			assert(done.find(v.get_edge_in(k)) != done.end());
+
 		}
 		code += v.v.properties().print_code(in);
 		v.v.free_edges();
@@ -537,26 +545,63 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		char* ptr;
 		auto reg = get_register(onames[i], false, onlystore);
 		code += reg.second;
-		const char* basename = i % 2 == 0 ? "%rdi" : "%rsi";
+		const char* basename = !cmplx ? "%rdi" : (i % 2 == 0 ? "%rdi" : "%rsi");
+		const char* stride = !cmplx ? "%rsi" : (i % 2 == 0 ? "%r8" : "%r9");
 		static bool sw = false;
 		sw = !sw;
-		const char* snm = sw ? "%rax" : "%r8";
+		const char* snm = sw ? "%rax" : "%r10";
 		std::string memloc;
 		if (i == 0) {
 			memloc = std::string("(") + basename + ")";
 		} else {
 			memloc = std::string("(") + basename + ", " + snm + ", 8)";
 		}
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(4 * i)).c_str(), "%rdx", snm);
-		code += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", reg.first.c_str(), memloc.c_str());
-		code += ptr;
-		free(ptr);
+		int index = cmplx ? 4 * (i / 2) : 4 * i;
+		if (index < 128) {
+			if (i != 0) {
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, snm);
+				code += ptr;
+				free(ptr);
+			}
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", reg.first.c_str(), memloc.c_str());
+			code += ptr;
+			free(ptr);
+		} else {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", (std::string("$") + std::to_string(index)).c_str(), snm);
+			loads += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "imul", stride, snm);
+			loads += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", reg.first.c_str(), memloc.c_str());
+			code += ptr;
+			free(ptr);
+		}
 	}
 
 	auto decls = db->get_declarations();
-	code = decls + loads + code;
+	std::string entry, exit;
+	char* ptr;
+	asprintf(&ptr, "%15s%-15s%s\n", "", "push", "%rbp");
+	entry += ptr;
+	free(ptr);
+	asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rsp", "%rbp");
+	entry += ptr;
+	free(ptr);
+	asprintf(&ptr, "%15s%-15s$%i, %s\n", "", "sub", db->size() * 32, "%rsp");
+	entry += ptr;
+	free(ptr);
+	asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rbp", "%rsp");
+	exit += ptr;
+	free(ptr);
+	asprintf(&ptr, "%15s%-15s%s\n", "", "pop", "%rbp");
+	exit += ptr;
+	free(ptr);
+	asprintf(&ptr, "%15s%-15s\n", "", "ret");
+	exit += ptr;
+	free(ptr);
+
+	code = decls + entry + loads + code + exit;
 	rc.first = code;
 	rc.second = 0;
 	for (int i = 0; i < decls.size(); i++) {
@@ -565,7 +610,6 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		}
 	}
 	//rc.first += clear_registers();
-	rc.first += "               ret\n";
 	rc.first += "               .align         32\n";
 	rc.first += constants;
 	return std::move(rc);
@@ -582,13 +626,131 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		assert(names != nullptr);
 		name = names->generate_name();
 	}
-	if (is_arithmetic(op)) {
-		const auto a = get_register(*name, true);
-		const auto b = get_register(*edges[0].v.properties().name, false);
+	if (is_fma(op)) {
+		math_vertex A(edges[0]);
+		math_vertex B(edges[1]);
+		math_vertex C(edges[2]);
+		std::string a = *A.v.properties().name;
+		std::string b = *B.v.properties().name;
+		std::string c = *C.v.properties().name;
+		std::string d = *name;
+		std::string opbase;
+		switch (op) {
+		case FMA:
+			opbase = "vfmadd";
+			break;
+		case FMS:
+			opbase = "vfmsub";
+			break;
+		case NFMA:
+			opbase = "vfnmadd";
+			break;
+		case NFMS:
+			opbase = "vfnmsub";
+			break;
+		}
+		char* ptr;
+		if (mem2reg.find(a) != mem2reg.end()) {
+			a = mem2reg[a];
+		}
+		if (mem2reg.find(b) != mem2reg.end()) {
+			b = mem2reg[b];
+		}
+		if (mem2reg.find(c) != mem2reg.end()) {
+			c = mem2reg[c];
+		}
+		if (mem2reg.find(d) != mem2reg.end()) {
+			d = mem2reg[d];
+		}
+		if (a == d || b == d) {
+			if (b == d) {
+				if (C.v.properties().op == CON) {
+					std::swap(a, c);
+				}
+				std::string opname = opbase + "213pd";
+				auto b1 = get_register(b, false);
+				auto c1 = get_register(c, false);
+				code += b1.second;
+				code += c1.second;
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", opname.c_str(), a.c_str(), c1.first.c_str(), b1.first.c_str());
+			} else {
+				if (C.v.properties().op == CON) {
+					std::swap(b, c);
+				}
+				std::string opname = opbase + "213pd";
+				auto a1 = get_register(a, false);
+				auto c1 = get_register(c, false);
+				code += a1.second;
+				code += c1.second;
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", opname.c_str(), b.c_str(), c1.first.c_str(), a1.first.c_str());
+			}
+		} else if (c == d) {
+			if (A.v.properties().op == CON) {
+				std::swap(b, a);
+			}
+			std::string opname = opbase + "231pd";
+			auto a1 = get_register(a, false);
+			auto c1 = get_register(c, false);
+			code += a1.second;
+			code += c1.second;
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", opname.c_str(), b.c_str(), a1.first.c_str(), c1.first.c_str());
+		} else {
+			if (reg2mem.find(b) == reg2mem.end()) {
+				std::swap(a, b);
+			}
+			auto b1 = get_register(b, false);
+			code += b1.second;
+			auto d1 = get_register(d, false);
+			switch (op) {
+			case FMA:
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", a.c_str(), b1.first.c_str(), d1.first.c_str());
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vaddpd", c.c_str(), d1.first.c_str(), d1.first.c_str());
+				break;
+			case FMS:
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", a.c_str(), b1.first.c_str(), d1.first.c_str());
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", c.c_str(), d1.first.c_str(), d1.first.c_str());
+				break;
+			case NFMA:
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", a.c_str(), b1.first.c_str(), d1.first.c_str());
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", d1.first.c_str(), c.c_str(), d1.first.c_str());
+				break;
+			case NFMS:
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", a.c_str(), b1.first.c_str(), d1.first.c_str());
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vaddpd", c.c_str(), d1.first.c_str(), d1.first.c_str());
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vxorpd", "CZ", d1.first.c_str(), d1.first.c_str());
+				code += ptr;
+				free(ptr);
+				break;
+			}
+		}
+		code += ptr;
+		free(ptr);
+	} else if (is_arithmetic(op)) {
+		bool sw = false;
+		if (op == MUL || op == ADD) {
+			sw = mem2reg.find(*edges[1].v.properties().name) == mem2reg.end();
+		}
+		auto a = get_register(*name, true);
+		auto b = get_register(*edges[0].v.properties().name, false);
+		if (sw) {
+			std::swap(a, b);
+		}
 //		const auto c = get_register(*edges[op == NEG ? 0 : 1].v.properties().name);
 		const auto A = a.first;
 		const auto B = b.first;
-		auto C = *edges[op == NEG ? 0 : 1].v.properties().name;
+		auto Cptr = edges[op == NEG ? 0 : 1].v.properties().name;
+		assert(Cptr);
+		auto C = *Cptr;
 		if (mem2reg.find(C) != mem2reg.end()) {
 			C = mem2reg[C];
 		}
@@ -610,7 +772,7 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", C.c_str(), B.c_str(), A.c_str());
 			break;
 		case NEG:
-			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", "NEG_ONE", B.c_str(), A.c_str());
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vxorpd", "CZ", B.c_str(), A.c_str());
 			break;
 		default:
 			break;
@@ -698,7 +860,7 @@ bool math_vertex::check_cse() {
 			delete vptr;
 		});
 		auto op = get_op();
-		assert((int ) op < 6);
+		assert((int ) op < 10);
 		assert((int ) op >= 0);
 		cse[vn] = *this;
 		return false;
@@ -749,9 +911,10 @@ bool math_vertex::is_neg() const {
 math_vertex math_vertex::get_neg() const {
 	assert(valid());
 	if (is_neg()) {
+		assert(v.get_edge_in_count() > 0);
 		auto edge = get_edge_in(0);
 		if (v.properties().goal) {
-			edge.set_goal();
+//		edge.set_goal();
 		}
 		return edge;
 	} else {
@@ -765,6 +928,62 @@ size_t math_vertex::key::operator()(const math_vertex& v) const {
 
 bool math_vertex::is_constant() const {
 	return get_op() == CON;
+}
+
+math_vertex math_vertex::optimize_fma() {
+	auto op = v.properties().op;
+	math_vertex a;
+	math_vertex b;
+	math_vertex c;
+	bool flag = false;
+	if (edge_count(op) >= 1) {
+		a = get_edge_in(0);
+	}
+	if (edge_count(op) >= 2) {
+		b = get_edge_in(1);
+	}
+	if (op == ADD) {
+		if (a.v.properties().op == MUL) {
+			flag = true;
+			math_vertex a0 = a.v.get_edge_in(0);
+			math_vertex a1 = a.v.get_edge_in(1);
+			v.replace_edge_in(a, a0);
+			v.replace_edge_in(b, a1);
+			v.add_edge_in(b.v);
+			v.properties().op = FMA;
+		} else if (b.v.properties().op == MUL) {
+			flag = true;
+			math_vertex b0 = b.v.get_edge_in(0);
+			math_vertex b1 = b.v.get_edge_in(1);
+			v.replace_edge_in(a, b0);
+			v.replace_edge_in(b, b1);
+			v.add_edge_in(a.v);
+			v.properties().op = FMA;
+		}
+	} else if (op == SUB) {
+		if (a.v.properties().op == MUL) {
+			flag = true;
+			math_vertex a0 = a.v.get_edge_in(0);
+			math_vertex a1 = a.v.get_edge_in(1);
+			v.replace_edge_in(a, a0);
+			v.replace_edge_in(b, a1);
+			v.add_edge_in(b.v);
+			v.properties().op = FMS;
+		} else if (b.v.properties().op == MUL) {
+			flag = true;
+			math_vertex b0 = b.v.get_edge_in(0);
+			math_vertex b1 = b.v.get_edge_in(1);
+			v.replace_edge_in(a, b0);
+			v.replace_edge_in(b, b1);
+			v.add_edge_in(a.v);
+			v.properties().op = NFMA;
+		}
+	}
+	op = v.properties().op;
+	for (int i = 0; i < edge_count(op); i++) {
+		v.replace_edge_in(v.get_edge_in(i), math_vertex(v.get_edge_in(i)).optimize_fma().v);
+	}
+	return math_vertex(*this);
 }
 
 math_vertex math_vertex::optimize() {
@@ -897,8 +1116,8 @@ math_vertex math_vertex::optimize() {
 		break;
 	case NEG:
 		if (a.is_neg()) {
-			//		c = a.get_neg();
-			//		flag = true;
+			c = a.get_neg();
+			flag = true;
 			opt = 24;
 		}
 		break;

@@ -22,6 +22,9 @@ public:
 	name_ptr generate_name();
 	std::pair<name_server::name_ptr, std::string> reserve_name(std::string name);
 	std::string get_declarations() const;
+	int size() const {
+		return next_id;
+	}
 private:
 	std::shared_ptr<std::set<std::string>> available;
 	std::shared_ptr<std::unordered_map<std::string, std::weak_ptr<std::string>>> in_use;

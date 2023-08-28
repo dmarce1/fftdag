@@ -53,6 +53,7 @@ public:
 		}
 	};
 	int compute_labels(executor& exe, bool left_desc = false) {
+		abort();
 		if (exe.touched.find(state_ptr->id) == exe.touched.end()) {
 			auto& edges_in = state_ptr->edges_in;
 			if (edges_in.size() == 2) {
@@ -219,15 +220,15 @@ public:
 	}
 	dag_vertex(const dag_vertex& other) = default;
 	dag_vertex& operator=(const dag_vertex& other) {
-		if (get_unique_id() != other.get_unique_id()) {
+	//	if (get_unique_id() != other.get_unique_id()) {
 			state_ptr = other.state_ptr;
-		}
+	//	}
 		return *this;
 	}
 	dag_vertex& operator=(dag_vertex&& other) {
-		if (get_unique_id() != other.get_unique_id()) {
+	//	if (get_unique_id() != other.get_unique_id()) {
 			state_ptr = std::move(other.state_ptr);
-		}
+	//	}
 		return *this;
 	}
 	bool operator==(const dag_vertex& v) const {
@@ -254,6 +255,7 @@ public:
 	void add_edge_in(dag_vertex& v) {
 		state_ptr->edges_in.push_back(v);
 	}
+
 	void remove_edge_in(const dag_vertex& v) {
 		auto& edges_in = state_ptr->edges_in;
 		for (int i = 0; i < edges_in.size(); i++) {
@@ -261,8 +263,8 @@ public:
 				edges_in.pop_back();
 				return;
 			}
-			assert(false);
 		}
+		assert(false);
 	}
 	dag_vertex get_edge_in(int i) const {
 		return state_ptr->edges_in[i];
@@ -277,6 +279,7 @@ public:
 				return;
 			}
 		}
+		assert(false);
 	}
 	Properties& properties() {
 		return state_ptr->props;

@@ -19,7 +19,7 @@
 #include <stack>
 
 typedef enum {
-	SUB, NEG, MUL, IN, CON, ADD, INVALID
+	INVALID, SUB, NEG, MUL, IN, CON, ADD, FMA, NFMA, FMS, NFMS
 } operation_t;
 
 bool is_arithmetic(operation_t op);
@@ -115,6 +115,7 @@ public:
 	math_vertex(const dag_vertex<properties>& v);
 	math_vertex(dag_vertex<properties> && v);
 	math_vertex(double constant);
+	math_vertex optimize_fma();
 	math_vertex& operator=(const math_vertex& other) {
 		if (get_unique_id() != other.get_unique_id()) {
 			v = other.v;
@@ -149,7 +150,7 @@ public:
 	static op_cnt_t operation_count(std::vector<math_vertex>);
 	static op_cnt_t operation_count(std::vector<cmplx>);
 	static std::vector<math_vertex> new_inputs(int cnt);
-	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices);
+	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices, bool cmpx, int simdsz);
 	static void optimize(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A, const math_vertex& B);
@@ -169,6 +170,7 @@ private:
 	static bool first_init;
 	static std::map<double, math_vertex> consts;
 	static std::unordered_map<value_number, cse_entry, value_key> cse;
+	static math_vertex tri_op(operation_t op, math_vertex A, math_vertex B, math_vertex C);
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);
 	static math_vertex unary_op(operation_t op, math_vertex A);
 	static std::vector<math_vertex> essential_constants;
@@ -266,6 +268,22 @@ inline bool is_arithmetic(operation_t op) {
 	case SUB:
 	case NEG:
 	case MUL:
+	case FMA:
+	case FMS:
+	case NFMA:
+	case NFMS:
+		return true;
+	default:
+		return false;
+	}
+}
+
+inline bool is_fma(operation_t op) {
+	switch (op) {
+	case FMA:
+	case FMS:
+	case NFMA:
+	case NFMS:
 		return true;
 	default:
 		return false;
