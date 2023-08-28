@@ -187,8 +187,8 @@ struct cmplx {
 	cmplx() = default;
 	cmplx(const cmplx &) = default;
 	void set_goal() {
-		x.set_goal();
-		y.set_goal();
+	//	x.set_goal();
+	//	y.set_goal();
 	}
 	cmplx operator+(cmplx other) const {
 		cmplx C;

@@ -774,7 +774,7 @@ std::vector<cmplx> convolve_fast(std::vector<cmplx> x, std::vector<std::complex<
 		}
 	}
 	for (auto z : y) {
-		z.set_goal();
+	z.set_goal();
 	}
 	return y;
 }

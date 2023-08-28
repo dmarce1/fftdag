@@ -344,7 +344,7 @@ void print_fft_bests() {
 std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts, bool root) {
 	for (auto x : xin) {
 		x.x.set_goal();
-		x.y.set_goal();
+	x.y.set_goal();
 	}
 	if (N == 1) {
 		return xin;

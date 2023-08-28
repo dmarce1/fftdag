@@ -49,6 +49,7 @@ int gcd(int a, int b) {
 	return std::max(a, b);
 }
 
+
 std::string apply_header(std::string code, std::string name) {
 	std::string rc;
 	rc += std::string("               .global        ") + name + "\n";
@@ -64,15 +65,49 @@ int main(int argc, char **argv) {
 	int cnt2 = 0;
 
 	fft_reset_cache();
-	fprintf( stderr, "------------------------------COMPLEX-----------------------------\n");
+	fprintf( stderr, "------------------------------COMPLEX-------------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(2 * N);
+		auto outputs = fft(inputs, N, 0);
+		auto cnt = math_vertex::operation_count(outputs);
+		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4, NONE);
+		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+		std::string code = apply_header(tmp.first, std::string("sfft_complex_v4df_") + std::to_string(N));
+		std::string fname = "fft.complex." + std::to_string(N) + ".S";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+		cnt1 += tmp.second;
+		cnt2 += cnt.total();
+	}
+
+	fft_reset_cache();
+	fprintf( stderr, "------------------------------COMPLEX-DIT-------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(2 * N);
 		auto outputs = fft(inputs, N, 0);
 		auto cnt = math_vertex::operation_count(outputs);
 		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4, DIT);
 		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		std::string code = apply_header(tmp.first, std::string("short_fft_complex_simd4_v4df") + std::to_string(N));
-		std::string fname = "fft.complex." + std::to_string(N) + ".S";
+		std::string code = apply_header(tmp.first, std::string("sfft_complex_dit_v4df_") + std::to_string(N));
+		std::string fname = "fft.complex.dit." + std::to_string(N) + ".S";
+		FILE* fp = fopen(fname.c_str(), "wt");
+		fprintf(fp, "%s\n", code.c_str());
+		fclose(fp);
+		cnt1 += tmp.second;
+		cnt2 += cnt.total();
+	}
+
+	fft_reset_cache();
+	fprintf( stderr, "------------------------------COMPLEX-DIF-------------------------\n");
+	for (int N = Nmin; N <= Nmax; N++) {
+		auto inputs = math_vertex::new_inputs(2 * N);
+		auto outputs = fft(inputs, N, 0);
+		auto cnt = math_vertex::operation_count(outputs);
+		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4, DIF);
+		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+		std::string code = apply_header(tmp.first, std::string("sfft_complex_dif_v4df_") + std::to_string(N));
+		std::string fname = "fft.complex.dif." + std::to_string(N) + ".S";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		fprintf(fp, "%s\n", code.c_str());
 		fclose(fp);
@@ -88,7 +123,7 @@ int main(int argc, char **argv) {
 		auto cnt = math_vertex::operation_count(outputs);
 		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, 4, NONE);
 		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		std::string code = apply_header(tmp.first, std::string("short_fft_real_simd4_v4df") + std::to_string(N));
+		std::string code = apply_header(tmp.first, std::string("sfft_real_v4df_") + std::to_string(N));
 		std::string fname = "fft.real." + std::to_string(N) + ".S";
 		FILE* fp = fopen(fname.c_str(), "wt");
 		fprintf(fp, "%s\n", code.c_str());
@@ -130,10 +165,16 @@ int main(int argc, char **argv) {
 	fprintf(fp, "extern \"C\" {");
 
 	for( int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "void short_fft_complex_v4df_%i(v4df*, v4df*, v4df*, size_t, size_t);\n", n);
+		fprintf(fp, "void sfft_complex_v4df_%i(v4df*, v4df*, size_t, size_t);\n", n);
 	}
 	for( int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "void short_fft_real_v4df_%i(v4df*, v4df*, size_t);\n", n);
+		fprintf(fp, "void sfft_real_v4df_%i(v4df*, size_t);\n", n);
+	}
+	for( int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+		fprintf(fp, "void sfft_complex_dit_v4df_%i(v4df*, v4df*, v4df*, v4df*, size_t, size_t);\n", n);
+	}
+	for( int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+		fprintf(fp, "void sfft_complex_dif_v4df_%i(v4df*, v4df*, v4df*, v4df*, size_t, size_t);\n", n);
 	}
 	fprintf(fp, "}\n");
 	fclose(fp);

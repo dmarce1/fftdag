@@ -14,7 +14,7 @@ std::string name_server::get_declarations() const {
 
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
-		auto new_name = std::to_string(-32*(1+next_id)) + std::string("(%ebp)");
+		auto new_name = std::to_string(-32*(1+next_id)) + std::string("(%rbp)");
 		available->insert(std::move(new_name));
 		next_id++;
 	}
