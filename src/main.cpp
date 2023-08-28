@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 		auto inputs = math_vertex::new_inputs(2 * N);
 		auto outputs = fft(inputs, N, 0);
 		auto cnt = math_vertex::operation_count(outputs);
-		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4);
+		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4, DIT);
 		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 		std::string code = apply_header(tmp.first, std::string("short_fft_complex_simd4_v4df") + std::to_string(N));
 		std::string fname = "fft.complex." + std::to_string(N) + ".S";
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 		auto inputs = math_vertex::new_inputs(N);
 		auto outputs = fft(inputs, N, FFT_REAL);
 		auto cnt = math_vertex::operation_count(outputs);
-		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, 4);
+		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, 4, NONE);
 		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 		std::string code = apply_header(tmp.first, std::string("short_fft_real_simd4_v4df") + std::to_string(N));
 		std::string fname = "fft.real." + std::to_string(N) + ".S";

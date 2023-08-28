@@ -110,7 +110,7 @@ void clear_registers() {
 	regcnt = 0;
 }
 
-std::pair<std::string, std::string> get_register(std::string mem, bool noload, std::set<std::string> onlystore = std::set<std::string>()) {
+std::pair<std::string, std::string> get_register(std::string mem, bool noload, int maxreg = 16, std::set<std::string> onlystore = std::set<std::string>()) {
 	std::pair<std::string, std::string> rc;
 	std::string& reg = rc.first;
 	if (mem[0] == '%') {
@@ -124,8 +124,13 @@ std::pair<std::string, std::string> get_register(std::string mem, bool noload, s
 				regq.push(std::string("%ymm") + std::to_string(n));
 			}
 		}
-		reg = regq.front();
-		regq.pop();
+		do {
+			reg = regq.front();
+			regq.pop();
+			if (atoi(reg.c_str() + 4) >= maxreg) {
+				regq.push(reg);
+			}
+		} while (atoi(reg.c_str() + 4) >= maxreg);
 		if (mem2reg.find(mem) != mem2reg.end()) {
 			assert(mem2reg[mem][0] == '%');
 		}
@@ -389,7 +394,7 @@ int math_vertex::get_group_id() const {
 	return v.properties().group_id;
 }
 
-std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, int simdsz) {
+std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, int simdsz, decimation_t deci) {
 	clear_registers();
 	std::string code;
 	int ncnt = 5;
@@ -403,14 +408,18 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	auto db = outputs[0].v.properties().names;
 
 	std::string loads;
+	std::string lreg;
+	std::pair<std::string, std::string> reg;
 	for (int i = 0; i < inputs.size(); i++) {
-		auto reg = get_register(*inputs[i].v.properties().name, true);
+		lreg = reg.first;
+		reg = get_register(*inputs[i].v.properties().name, true, DIT ? 14 : 16);
 		onames.push_back(std::to_string(-32 * (1 + i)) + std::string("(%ebp)"));
 		loads += reg.second;
 		char* ptr;
 		const char* basename = !cmplx ? "%rdi" : (i % 2 == 0 ? "%rdi" : "%rsi");
 		const char* stride = !cmplx ? "%rsi" : (i % 2 == 0 ? "%r8" : "%r9");
-		if (i == 0) {
+		int index = cmplx ? 4 * (i / 2) : 4 * i;
+		if (index == 0) {
 			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ")").c_str(), reg.first.c_str());
 			loads += ptr;
 			free(ptr);
@@ -418,7 +427,6 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			static bool sw = true;
 			const char* snm = sw ? "%rax" : "%r10";
 			sw = !sw;
-			int index = cmplx ? 4 * (i / 2) : 4 * i;
 			if (index < 128) {
 				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, snm);
 				loads += ptr;
@@ -432,7 +440,30 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 				free(ptr);
 			}
 			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + snm + ", 8)").c_str(), reg.first.c_str());
-
+			loads += ptr;
+			free(ptr);
+		}
+		if (deci == DIT && i % 2 == 1) {
+			std::string cos = std::to_string(32 * (i - 1)) + "(%rdx)";
+			std::string sin = std::to_string(32 * (i)) + "(%rcx)";
+			const auto ireg = reg.first;
+			const auto rreg = lreg;
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", rreg.c_str(), "%ymm14");
+			loads += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", ireg.c_str(), "%ymm15");
+			loads += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", cos.c_str(), "%ymm14", rreg.c_str());
+			loads += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", cos.c_str(), "%ymm15", ireg.c_str());
+			loads += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vfmsub231pd", sin.c_str(), "%ymm15", rreg.c_str());
+			loads += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vfmadd231pd", sin.c_str(), "%ymm14", ireg.c_str());
 			loads += ptr;
 			free(ptr);
 		}
@@ -542,8 +573,9 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	std::set<std::string> onlystore(onames.begin(), onames.end());
 	for (int k = 0; k < onames.size(); k++) {
 		const int i = sorted[k];
+		outputs[i] = math_vertex();
 		char* ptr;
-		auto reg = get_register(onames[i], false, onlystore);
+		auto reg = get_register(onames[i], false, 16, onlystore);
 		code += reg.second;
 		const char* basename = !cmplx ? "%rdi" : (i % 2 == 0 ? "%rdi" : "%rsi");
 		const char* stride = !cmplx ? "%rsi" : (i % 2 == 0 ? "%r8" : "%r9");
@@ -551,18 +583,17 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		sw = !sw;
 		const char* snm = sw ? "%rax" : "%r10";
 		std::string memloc;
-		if (i == 0) {
+		int index = cmplx ? 4 * (i / 2) : 4 * i;
+		if (index == 0) {
 			memloc = std::string("(") + basename + ")";
 		} else {
 			memloc = std::string("(") + basename + ", " + snm + ", 8)";
 		}
-		int index = cmplx ? 4 * (i / 2) : 4 * i;
 		if (index < 128) {
-			if (i != 0) {
-				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, snm);
-				code += ptr;
-				free(ptr);
-			}
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, snm);
+			code += ptr;
+			free(ptr);
+
 			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", reg.first.c_str(), memloc.c_str());
 			code += ptr;
 			free(ptr);
