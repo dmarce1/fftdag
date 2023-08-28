@@ -282,7 +282,7 @@ void test() {
 			Y = X;
 			tm1.start();
 			tm3.start();
-			fft_complex((double*) X.data(), N);
+			sfft_complex((double*) X.data(), N);
 			tm1.stop();
 			tm3.stop();
 			tm2.start();
