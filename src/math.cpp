@@ -335,47 +335,6 @@ int math_vertex::get_group_id() const {
 	return v.properties().group_id;
 }
 
-int compress_stack_locs(std::string& code) {
-	return -1;
-	std::map<int, std::vector<int>> locs;
-	for (int i = 0; i < code.size(); i++) {
-		if (std::string(code.begin() + i, code.begin() + i + 6) == std::string("(%rbp)")) {
-			int j = i;
-			while (code[j] != '-') {
-				j--;
-				if (j < 0) {
-					assert(false);
-					abort();
-				}
-			}
-			int num = atoi(&code[j + 1]);
-			locs[num].push_back(j);
-		}
-	}
-	int loc = 32;
-	if (locs.size()) {
-		for (auto i = locs.begin(); i != locs.end(); i++) {
-			const auto& these_locs = i->second;
-			std::string newstr = std::to_string(-loc) + std::string("(%rbp)");
-			for (auto l : these_locs) {
-				int j = l;
-				while (code[j] != ')') {
-					j++;
-					if (j >= code.size()) {
-						assert(false);
-						abort();
-					}
-				}
-				j -= l;
-				l++;
-				//	code.replace(l, j, newstr);
-			}
-			loc += 32;
-		}
-	}
-	return 32 * locs.size();
-}
-
 std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, int simdsz, decimation_t deci) {
 	std::string code;
 	int ncnt = 5;
@@ -524,6 +483,9 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		entry += ptr;
 		free(ptr);
 		asprintf(&ptr, "%15s%-15s$%i, %s\n", "", "sub", stacksz, "%rsp");
+		entry += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "and", "$0xfffffffffffffc00", "%rsp");
 		entry += ptr;
 		free(ptr);
 		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rbp", "%rsp");

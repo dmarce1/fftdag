@@ -57,7 +57,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 			reg = reg_q->front();
 			reg_q->pop();
 			if (reg2mem->find(reg) != reg2mem->end()) {
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", reg.c_str(), (*reg2mem)[reg].c_str());
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovapd", reg.c_str(), (*reg2mem)[reg].c_str());
 				code += ptr;
 				free(ptr);
 				mem2reg->erase((*reg2mem)[reg]);
@@ -68,7 +68,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 			reg_q->push(reg);
 		}
 		if (!noload) {
-			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", mem.c_str(), reg.c_str());
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovapd", mem.c_str(), reg.c_str());
 			code += ptr;
 			free(ptr);
 		}
@@ -78,7 +78,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
-		auto new_name = std::to_string(-32 * (1 + next_id)) + std::string("(%rbp)");
+		auto new_name = (next_id ? std::to_string(32 * (next_id)) : std::string("")) + std::string("(%rsp)");
 		available->insert(std::move(new_name));
 		next_id++;
 	}
@@ -101,29 +101,6 @@ name_server::name_ptr name_server::generate_name() {
 	return nptr;
 }
 
-/*std::pair<name_server::name_ptr, std::string> name_server::reserve_name(std::string name) {
- std::string code;
- if (in_use->find(name) != in_use->end()) {
- auto other_ptr = name_ptr((*in_use)[name]);
- auto tmp = generate_name();
- std::swap(*tmp, *other_ptr);
- (*in_use)[*tmp] = tmp;
- (*in_use)[*other_ptr] = other_ptr;
- code = std::string("\t") + *other_ptr + " = " + *tmp + ";\n";
- }
- available->erase(name);
- auto ptr = new std::string(name);
- auto nptr = std::shared_ptr<std::string>(ptr, [this](std::string* ptr) {
- assert(in_use->find(*ptr) != in_use->end());
- in_use->erase(*ptr);
- available->insert(*ptr);
- delete ptr;
- });
- assert(in_use->find(name) == in_use->end());
- (*in_use)[name] = nptr;
- return std::make_pair(nptr, code);
- }
- */
 int distance(const std::string& a, const std::string& b) {
 	int d = std::numeric_limits<int>::max() - 1;
 	if (a[0] == b[0] && a[1] == b[1]) {
