@@ -557,19 +557,31 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		name = names->generate_name();
 	}
 	auto A = *name;
-	auto areg = names->get_register(A, code, op == IN);
+	auto areg = names->get_register(A, code, true);
 
 	if (op == IN) {
 		char* ptr;
 		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
 		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
 		int index = num;
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
-		code += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str(), areg.c_str());
-		code += ptr;
-		free(ptr);
+		if( index == 0 ) {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ")").c_str(), areg.c_str());
+			code += ptr;
+			free(ptr);
+		} else {
+			if( index == 1 ) {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + stride + ", 8)").c_str(), areg.c_str());
+				code += ptr;
+				free(ptr);
+			} else {
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str(), areg.c_str());
+				code += ptr;
+				free(ptr);
+			}
+		}
 	} else {
 		auto B = *edges[0].v.properties().name;
 		auto breg = names->get_register(B, code, false);
@@ -609,12 +621,24 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
 		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
 		int index = num;
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
-		code += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", areg.c_str(), (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str());
-		code += ptr;
-		free(ptr);
+		if( index == 0 ) {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", areg.c_str(), (std::string("(") + basename +")").c_str());
+			code += ptr;
+			free(ptr);
+		} else {
+			if( index == 1 ) {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", areg.c_str(), (std::string("(") + basename + ", " + stride + ", 8)").c_str());
+				code += ptr;
+				free(ptr);
+			} else {
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", areg.c_str(), (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str());
+				code += ptr;
+				free(ptr);
+			}
+		}
 		name = nullptr;
 	}
 	return code;

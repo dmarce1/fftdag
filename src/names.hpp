@@ -21,7 +21,7 @@ public:
 	name_server();
 	name_ptr generate_name();
 	std::string get_register(std::string, std::string&, bool);
-	std::pair<name_server::name_ptr, std::string> reserve_name(std::string name);
+	//std::pair<name_server::name_ptr, std::string> reserve_name(std::string name);
 	std::string get_declarations() const;
 	std::string current_name(std::string nm) const;
 	bool name_in_use(std::string nm) const {
@@ -35,10 +35,10 @@ private:
 	std::shared_ptr<std::unordered_map<std::string, std::weak_ptr<std::string>>> in_use;
 	std::string declarations;
 	int next_id;
-	std::unordered_map<std::string, std::string> reg2mem;
-	std::unordered_map<std::string, std::string> mem2reg;
-	std::queue<std::string> reg_q;
-	int reg_cnt;
+	std::shared_ptr<std::unordered_map<std::string, std::string>> reg2mem;
+	std::shared_ptr<std::unordered_map<std::string, std::string>> mem2reg;
+	std::shared_ptr<std::set<std::string>> avail_regs;
+	std::shared_ptr<std::queue<std::string>> reg_q;
 };
 
 int distance(const std::string& a, const std::string& b);
