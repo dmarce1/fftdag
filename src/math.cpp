@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <cstring>
 #include <queue>
 
 bool is_additive(operation_t op) {
@@ -530,7 +531,26 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	 }*/
 	auto decls = db->get_declarations();
 
-	int stacksz = db->size() * 32;
+	std::string defines;
+	std::set<std::string> found;
+	int memnum = 0;
+	for (int i = 0; i < code.size() - 7; i++) {
+		char token[7];
+		for (int j = 0; j < 7; j++) {
+			token[j] = code[i + j];
+		}
+		token[6] = '\0';
+		if (strncmp(token, "MEM", 3) == 0) {
+			char* ptr;
+			if (found.find(token) == found.end()) {
+				asprintf(&ptr, "%-15s%-15s%s\n", "#define", token, (std::to_string(32 * memnum++) + std::string("(%rsp)")).c_str());
+				defines += ptr;
+				free(ptr);
+				found.insert(token);
+			}
+		}
+	}
+	int stacksz = 32 * memnum;
 	std::string entry, exit;
 	char* ptr;
 	if (stacksz) {
@@ -556,7 +576,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	asprintf(&ptr, "%15s%-15s\n", "", "ret");
 	exit += ptr;
 	free(ptr);
-	code = decls + entry + code + exit;
+	code = defines + decls + entry + code + exit;
 	rc.first = code;
 	rc.second = 0;
 	for (int i = 0; i < decls.size(); i++) {
@@ -567,6 +587,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	//rc.first += clear_registers();
 	rc.first += "               .align         32\n";
 	rc.first += constants;
+	rc.first = rc.first;
 	return std::move(rc);
 }
 

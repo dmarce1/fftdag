@@ -1,6 +1,7 @@
 #include "names.hpp"
 #include <cassert>
 #include <limits>
+#include <algorithm>
 
 name_server::name_server() {
 	next_id = 0;
@@ -79,7 +80,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
-		auto new_name = (next_id ? std::to_string(32 * (next_id)) : std::string("")) + std::string("(%rsp)");
+		auto new_name = std::string( "MEM") + &((std::to_string(next_id + 1000))[1]);
 		available->insert(std::move(new_name));
 		next_id++;
 	}

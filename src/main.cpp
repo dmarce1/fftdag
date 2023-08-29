@@ -234,7 +234,7 @@ int main(int argc, char **argv) {
 
 	fp = fopen("Makefile", "wt");
 	fprintf(fp, "CC=g++\n");
-	fprintf(fp, "CFLAGS=-I. -Ofast -march=native\n");
+//	fprintf(fp, "CFLAGS=-I. -Ofast -march=native\n");
 	//fprintf(fp, "CFLAGS=-I. -g -fsanitize=address -D_GLIBCXX_DEBUG -march=native\n");
 	fprintf(fp, "DEPS = sfft.hpp\n");
 	fprintf(fp, "OBJ = ");
