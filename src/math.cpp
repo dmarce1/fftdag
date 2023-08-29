@@ -340,6 +340,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	int ncnt = 5;
 	std::pair<std::string, int> rc;
 	for (int n = 0; n < outputs.size(); n++) {
+		outputs[n] = outputs[n].optimize_fma();
 		auto& props = outputs[n].v.properties();
 		props.iscmplxreal = props.iscmplximag = props.isreal = false;
 		props.terminal = true;
@@ -575,10 +576,70 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		assert(names != nullptr);
 		name = names->generate_name();
 	}
-	auto A = *name;
-	auto areg = names->get_register(A, code, true);
+	if (is_fma(op)) {
+		std::string opbase;
+		switch (op) {
+		case FMA:
+			opbase = "vfmadd";
+			break;
+		case FMS:
+			opbase = "vfmsub";
+			break;
+		case NFMA:
+			opbase = "vfnmadd";
+			break;
+		case NFMS:
+			opbase = "vfnmsub";
+			break;
+		};
+		auto b = edges[0];
+		auto c = edges[1];
+		auto d = edges[2];
+		auto B = *edges[0].v.properties().name;
+		auto C = *edges[1].v.properties().name;
+		auto D = *edges[2].v.properties().name;
+		if (b.v.use_count() <= 3) {
+			std::swap(b, c);
+			std::swap(B, C);
+		}
+		if (c.v.properties().op == CON) {
+			std::swap(b, c);
+			std::swap(B, C);
+		}
+		char* ptr;
+		if (d.v.use_count() <= 3) {
+			auto creg = names->get_register(C, code, false);
+			auto dreg = names->get_register(D, code, false);
+			B = names->current_name(B);
+			names->transfer_register(dreg, D, *name);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", (opbase + "231pd").c_str(), B.c_str(), creg.c_str(), dreg.c_str());
+			code += ptr;
+			free(ptr);
+		} else if (c.v.use_count() <= 3) {
+			auto creg = names->get_register(C, code, false);
+			auto dreg = names->get_register(D, code, false);
+			B = names->current_name(B);
+			names->transfer_register(creg, C, *name);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", (opbase + "132pd").c_str(), B.c_str(), dreg.c_str(), creg.c_str());
+			code += ptr;
+			free(ptr);
+		} else {
+			auto A = *name;
+			auto areg = names->get_register(A, code, true);
+			auto dreg = names->get_register(D, code, false);
+			B = names->current_name(B);
+			C = names->current_name(C);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovapd", C.c_str(), areg.c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", (opbase + "132pd").c_str(), B.c_str(), dreg.c_str(), areg.c_str());
+			code += ptr;
+			free(ptr);
+		}
 
-	if (op == IN) {
+	} else if (op == IN) {
+		auto A = *name;
+		auto areg = names->get_register(A, code, true);
 		char* ptr;
 		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
 		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
@@ -602,6 +663,8 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 			}
 		}
 	} else {
+		auto A = *name;
+		auto areg = names->get_register(A, code, true);
 		auto B = *edges[0].v.properties().name;
 		auto breg = names->get_register(B, code, false);
 		std::string C;
@@ -636,6 +699,8 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		}
 	}
 	if (terminal) {
+		auto A = *name;
+		auto areg = names->get_register(A, code, true);
 		char* ptr;
 		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
 		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
@@ -811,7 +876,7 @@ bool math_vertex::is_constant() const {
 }
 
 math_vertex math_vertex::optimize_fma() {
-	return *this;
+//	return *this;
 	auto op = v.properties().op;
 	math_vertex a;
 	math_vertex b;

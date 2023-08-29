@@ -24,6 +24,11 @@ public:
 	//std::pair<name_server::name_ptr, std::string> reserve_name(std::string name);
 	std::string get_declarations() const;
 	std::string current_name(std::string nm) const;
+	void transfer_register(std::string reg, std::string from, std::string to) {
+		(*reg2mem)[reg] = to;
+		(*mem2reg)[to] = reg;
+		mem2reg->erase(from);
+	}
 	bool name_in_use(std::string nm) const {
 		return in_use->find(nm) != in_use->end();
 	}
