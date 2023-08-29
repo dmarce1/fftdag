@@ -6,15 +6,64 @@ name_server::name_server() {
 	next_id = 0;
 	available = std::make_shared<std::set<std::string>>();
 	in_use = std::make_shared<std::unordered_map<std::string, std::weak_ptr<std::string>>>();
+	reg_cnt = 0;
 }
 
 std::string name_server::get_declarations() const {
 	return declarations;
 }
 
+std::string name_server::current_name(std::string nm) const {
+	if (mem2reg.find(nm) != mem2reg.end()) {
+		return mem2reg.find(nm)->second;
+	} else {
+		return nm;
+	}
+}
+
+std::string name_server::get_register(std::string mem, std::string& code, bool noload) {
+	assert(mem[0] != 'C');
+	assert(mem[0] != '%');
+	if (mem2reg.find(mem) != mem2reg.end()) {
+		return mem2reg[mem];
+	} else {
+		char* ptr;
+		std::string reg;
+		if (reg_cnt < 14) {
+			reg = std::string("%ymm") + std::to_string(reg_cnt++);
+			mem2reg[mem] = reg;
+			reg2mem[reg] = mem;
+			reg_q.push(reg);
+		} else {
+			if (!reg_q.size()) {
+				assert(false);
+				abort();
+			}
+			reg = reg_q.front();
+			reg_q.pop();
+			if (reg2mem.find(reg) != reg2mem.end()) {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", reg.c_str(), reg2mem[reg].c_str());
+				code += ptr;
+				free(ptr);
+				mem2reg.erase(reg2mem[reg]);
+				reg2mem.erase(reg);
+			}
+			mem2reg[mem] = reg;
+			reg2mem[reg] = mem;
+			reg_q.push(reg);
+		}
+		if (!noload) {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", mem.c_str(), reg.c_str());
+			code += ptr;
+			free(ptr);
+		}
+		return reg;
+	}
+}
+
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
-		auto new_name = std::to_string(-32*(1+next_id)) + std::string("(%rbp)");
+		auto new_name = std::to_string(-32 * (1 + next_id)) + std::string("(%rbp)");
 		available->insert(std::move(new_name));
 		next_id++;
 	}
@@ -25,6 +74,10 @@ name_server::name_ptr name_server::generate_name() {
 		assert(in_use->find(*ptr) != in_use->end());
 		in_use->erase(*ptr);
 		available->insert(*ptr);
+		if( mem2reg.find(*ptr) != mem2reg.end()) {
+			reg2mem.erase(mem2reg[*ptr]);
+			mem2reg.erase(*ptr);
+		}
 		delete ptr;
 	});
 	assert(in_use->find(name) == in_use->end());
