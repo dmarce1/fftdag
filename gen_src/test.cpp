@@ -280,6 +280,7 @@ void cooley_tukey(complex<fft_simd4>* X, complex<fft_simd4>* Y, int N) {
 
  }
  */
+timer tm1, tm2, tm3, tm4;
 
 void FFT(std::vector<complex<double>>& Z) {
 	int N = Z.size();
@@ -289,7 +290,9 @@ void FFT(std::vector<complex<double>>& Z) {
 		X[i] = Z[i / 4].real();
 		Y[i] = Z[i / 4].imag();
 	}
+	tm2.start();
 	sfft_complex(X.data(), Y.data(), 4, 4, N);
+	tm2.stop();
 	for (int i = 0; i < 4 * N; i++) {
 		Z[i / 4].real() = X[i];
 		Z[i / 4].imag() = Y[i];
@@ -301,9 +304,7 @@ double rand1() {
 }
 
 int main(int argc, char **argv) {
-	timer tm3, tm4;
 	for (int N = 2; N <= FFT_NMAX; N++) {
-		timer tm1, tm2;
 		while (!can_cooley_tukey(N)) {
 			N++;
 		}
@@ -324,13 +325,11 @@ int main(int argc, char **argv) {
 			fftw(Y);
 			if (i != 0) {
 				tm1.stop();
-				tm2.start();
 				tm3.stop();
 				tm4.start();
 			}
 			FFT(X);
 			if (i != 0) {
-				tm2.stop();
 				tm4.stop();
 			}
 			for (int n = 0; n < N; n++) {
@@ -349,7 +348,8 @@ int main(int argc, char **argv) {
 			f += "(" + std::to_string(i->first) + "^" + std::to_string(i->second) + ")";
 		}
 		printf("%i: %32s | %e %e %e %e %e\n", N, f.c_str(), avg_err, tm1.read(), tm2.read(), tm2.read() / tm1.read(), tm4.read() / tm3.read());
-
+		tm2.reset();
+		tm1.reset();
 	}
 	return 0;
 }

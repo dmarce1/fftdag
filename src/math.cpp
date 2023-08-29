@@ -87,83 +87,16 @@ std::string math_vertex::value_number::to_string() const {
 }
 
 math_vertex::properties::properties() {
-	out_num = -1;
+	num = -1;
 	cse = false;
 	depth = 0;
 	group_id = -1;
 	goal = false;
+	terminal = false;
 }
 
 bool math_vertex::valid() const {
 	return v.valid();
-}
-
-std::unordered_map<std::string, std::string> mem2reg;
-std::unordered_map<std::string, std::string> reg2mem;
-std::queue<std::string> regq;
-int regcnt = 0;
-
-void clear_registers() {
-	mem2reg.clear();
-	reg2mem.clear();
-	regq = decltype(regq)();
-	regcnt = 0;
-}
-
-std::pair<std::string, std::string> get_register(std::string mem, bool noload, int maxreg = 16, std::set<std::string> onlystore = std::set<std::string>()) {
-	std::pair<std::string, std::string> rc;
-	std::string& reg = rc.first;
-	if (mem[0] == '%') {
-		reg = mem;
-		return rc;
-	}
-	bool reject = false;
-	if (mem2reg.find(mem) != mem2reg.end()) {
-		if (atoi(mem2reg[mem].c_str() + 4) >= maxreg) {
-			reject = true;
-			mem2reg.erase(mem);
-		}
-	}
-	if (mem2reg.find(mem) == mem2reg.end() || reject) {
-		if (regcnt < 16) {
-			regcnt = 16;
-			for (int n = 0; n < 16; n++) {
-				regq.push(std::string("%ymm") + std::to_string(n));
-			}
-		}
-		do {
-			reg = regq.front();
-			regq.pop();
-			if (atoi(reg.c_str() + 4) >= maxreg) {
-				regq.push(reg);
-			}
-		} while (atoi(reg.c_str() + 4) >= maxreg);
-		if (mem2reg.find(mem) != mem2reg.end()) {
-			assert(mem2reg[mem][0] == '%');
-		}
-		if (reg2mem.find(reg) != reg2mem.end()) {
-			if (reg2mem[reg][0] != 'C') {
-				if (onlystore.find(reg2mem[reg]) == onlystore.end() || onlystore.size() == 0) {
-					rc.second = std::string("               vmovupd        ") + reg + ", " + reg2mem[reg] + "\n";
-				}
-			}
-			mem2reg.erase(reg2mem[reg]);
-			reg2mem.erase(reg);
-		}
-		reg2mem[reg] = mem;
-		mem2reg[mem] = reg;
-		regq.push(reg);
-		if (!noload) {
-			rc.second += std::string("               vmovupd        ") + reg2mem[reg] + ", " + reg + "\n";
-		}
-	} else {
-		reg = mem2reg[mem];
-		assert(reg2mem[reg] == mem);
-	}
-	if (reg2mem.find(reg) != reg2mem.end()) {
-		assert(reg2mem[reg][0] != '%');
-	}
-	return rc;
 }
 
 void math_vertex::replace_edge(const math_vertex& a, math_vertex&& b) {
@@ -443,14 +376,35 @@ int compress_stack_locs(std::string& code) {
 }
 
 std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, int simdsz, decimation_t deci) {
-	clear_registers();
 	std::string code;
 	int ncnt = 5;
 	std::pair<std::string, int> rc;
 	for (int n = 0; n < outputs.size(); n++) {
-		//	outputs[n] = outputs[n].optimize_fma();
-		outputs[n].v.properties().out_num = n;
-		outputs[n].set_goal();
+		auto& props = outputs[n].v.properties();
+		props.iscmplxreal = props.iscmplximag = props.isreal = false;
+		props.terminal = true;
+		if (cmplx) {
+			props.num = n / 2;
+			props.iscmplximag = n % 2 == 1;
+			props.iscmplxreal = n % 2 == 0;
+		} else {
+			props.num = n;
+			props.isreal = true;
+			props.num = n;
+		}
+	}
+	for (int n = 0; n < inputs.size(); n++) {
+		auto& props = inputs[n].v.properties();
+		props.iscmplxreal = props.iscmplximag = props.isreal = false;
+		if (cmplx) {
+			props.num = n / 2;
+			props.iscmplximag = n % 2 == 1;
+			props.iscmplxreal = n % 2 == 0;
+		} else {
+			props.num = n;
+			props.isreal = true;
+		}
+		assert(props.op==IN);
 	}
 	auto db = outputs[0].v.properties().names;
 	const auto apply_twiddles = [&](std::vector<std::string> names) {
@@ -494,31 +448,15 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	std::string loads;
 	std::string lreg;
 	std::pair<std::string, std::string> reg;
-	for (int i = 0; i < inputs.size(); i++) {
-		char* ptr;
-		const auto name = *inputs[i].v.properties().name;
-		const char* basename = !cmplx ? "%rdi" : (i % 2 == 0 ? "%rdi" : "%rsi");
-		const char* stride = deci == NONE ? (!cmplx ? "%rsi" : (i % 2 == 0 ? "%rdx" : "%rcx")) : (!cmplx ? "%rsi" : (i % 2 == 0 ? "%r8" : "%r9"));
-		int index = cmplx ? (i / 2) : i;
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
-		loads += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str(), "%ymm0");
-		loads += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", "%ymm0", name.c_str());
-		loads += ptr;
-		free(ptr);
 
-	}
-	if (deci == DIT) {
+/*	if (deci == DIT) {
 		std::vector<std::string> nms;
 		for (auto i : inputs) {
 			nms.push_back(*i.v.properties().name);
 		}
 		std::reverse(nms.begin(), nms.end());
 		code += apply_twiddles(nms);
-	}
+	}*/
 	dag_vertex<properties>::executor exe;
 	std::vector<math_vertex::weak_ref> nodes;
 	std::vector<dag_vertex<properties>> dags;
@@ -618,36 +556,18 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			assert(done.find(v.get_edge_in(k)) != done.end());
 
 		}
-		if (v.v.properties().op != IN) {
-			code += v.v.properties().print_code(in);
-		}
+		code += v.v.properties().print_code(in);
 		v.v.free_edges();
 		done.insert(v);
 	}
-	if (deci == DIF) {
+/*	if (deci == DIF) {
 		std::vector<std::string> nms;
 		for (auto o : outputs) {
 			nms.push_back(*o.v.properties().name);
 		}
 		std::reverse(nms.begin(), nms.end());
 		code += apply_twiddles(nms);
-	}
-	for (int i = 0; i < outputs.size(); i++) {
-		char* ptr;
-		const auto name = *outputs[i].v.properties().name;
-		const char* basename = !cmplx ? "%rdi" : (i % 2 == 0 ? "%rdi" : "%rsi");
-		const char* stride = deci == NONE ? (!cmplx ? "%rsi" : (i % 2 == 0 ? "%rdx" : "%rcx")) : (!cmplx ? "%rsi" : (i % 2 == 0 ? "%r8" : "%r9"));
-		int index = cmplx ? (i / 2) : i;
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", name.c_str(), "%ymm0");
-		code += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
-		code += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", "%ymm0", (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str());
-		code += ptr;
-		free(ptr);
-	}
+	}*/
 
 	auto decls = db->get_declarations();
 
@@ -691,56 +611,82 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 
 std::string math_vertex::properties::print_code(const std::vector<math_vertex>& edges) {
 	std::string code;
-//	if (out_num != -1) {
-//		std::string nm = std::string("x[") + std::to_string(out_num) + std::string("]");
-//		auto tmp = names->reserve_name(std::move(nm));
-//		name = tmp.first;
-//		code += tmp.second;
 	if (name == nullptr) {
 		assert(names != nullptr);
 		name = names->generate_name();
 	}
-	auto A = *name;
-//	printf("%i\n", properties().op);
-	auto B = *edges[0].v.properties().name;
-	std::string C;
-	if (edges.size() > 1) {
-		C = *edges[1].v.properties().name;
+	if (op == IN) {
+		char* ptr;
+		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
+		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
+		int index = num;
+		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
+		code += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str(), "%ymm0");
+		code += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", "%ymm0", name->c_str());
+		code += ptr;
+		free(ptr);
+	} else {
+		auto A = *name;
+		auto B = *edges[0].v.properties().name;
+		std::string C;
+		if (edges.size() > 1) {
+			C = *edges[1].v.properties().name;
+		}
+		char* ptr;
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", A.c_str(), "%ymm0");
+		code += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", B.c_str(), "%ymm1");
+		code += ptr;
+		free(ptr);
+		switch (op) {
+		case ADD:
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vaddpd", C.c_str(), "%ymm1", "%ymm0");
+			code += ptr;
+			free(ptr);
+			break;
+		case SUB:
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", C.c_str(), "%ymm1", "%ymm0");
+			code += ptr;
+			free(ptr);
+			break;
+		case MUL:
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", C.c_str(), "%ymm1", "%ymm0");
+			code += ptr;
+			free(ptr);
+			break;
+		case NEG:
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vxorpd", "CZ", "%ymm1", "%ymm0");
+			code += ptr;
+			free(ptr);
+			break;
+		default:
+			break;
+		}
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", "%ymm0", A.c_str());
+		code += ptr;
+		free(ptr);
 	}
-	char* ptr;
-	asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", A.c_str(), "%ymm0");
-	code += ptr;
-	free(ptr);
-	asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", B.c_str(), "%ymm1");
-	code += ptr;
-	free(ptr);
-	switch (op) {
-	case ADD:
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vaddpd", C.c_str(), "%ymm1", "%ymm0");
+	if (terminal) {
+		char* ptr;
+		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
+		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
+		int index = num;
+		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
 		code += ptr;
 		free(ptr);
-		break;
-	case SUB:
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vsubpd", C.c_str(), "%ymm1", "%ymm0");
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", name->c_str(), "%ymm0");
 		code += ptr;
 		free(ptr);
-		break;
-	case MUL:
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vmulpd", C.c_str(), "%ymm1", "%ymm0");
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", "%ymm0", (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str());
 		code += ptr;
 		free(ptr);
-		break;
-	case NEG:
-		asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vxorpd", "CZ", "%ymm1", "%ymm0");
-		code += ptr;
-		free(ptr);
-		break;
-	default:
-		break;
+		name = nullptr;
 	}
-	asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", "%ymm0", A.c_str());
-	code += ptr;
-	free(ptr);
 	return code;
 }
 

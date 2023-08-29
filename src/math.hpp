@@ -50,7 +50,11 @@ public:
 		operation_t op;
 		name_server::name_ptr name;
 		double value;
-		int out_num;
+		int num;
+		bool terminal;
+		bool iscmplximag;
+		bool iscmplxreal;
+		bool isreal;
 		bool cse;
 		int depth;
 		int group_id;

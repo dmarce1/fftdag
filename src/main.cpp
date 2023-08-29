@@ -234,8 +234,9 @@ int main(int argc, char **argv) {
 
 	fp = fopen("Makefile", "wt");
 	fprintf(fp, "CC=g++\n");
-	fprintf(fp, "CFLAGS=-I. -Ofast -march=native\n");
-//	fprintf(fp, "CFLAGS=-I. -g -fsanitize=address -D_GLIBCXX_DEBUG -march=native\n");
+//	fprintf(fp, "CFLAGS=-I. -Ofast -march=native\n");
+	fprintf(fp, "ASMFLAGS=-I. -g -fsanitize=address -D_GLIBCXX_DEBUG -march=native\n");
+	fprintf(fp, "CFLAGS=-I. -g -fsanitize=address -D_GLIBCXX_DEBUG -march=native\n");
 	fprintf(fp, "DEPS = sfft.hpp\n");
 	fprintf(fp, "OBJ = ");
 	for (int n = Nmin; n <= Nmax; n++) {
@@ -250,6 +251,8 @@ int main(int argc, char **argv) {
 	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.real.%i.o ", n);
 	}
+	fprintf(fp, "\n%%.o: %%.S $(DEPS)\n");
+	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
 	fprintf(fp, "\n%%.o: %%.cpp $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
 	fprintf(fp, "ffttest: $(OBJ) util.o test.o\n");
