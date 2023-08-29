@@ -1,6 +1,8 @@
 #pragma once
 
 #include <map>
+#include <stdlib.h>
+#include <string>
 
 class assoc_set {
 	std::map<int, int> counts;

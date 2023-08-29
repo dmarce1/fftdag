@@ -446,30 +446,64 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			done.insert(node);
 		}
 	}
-	for (auto n : nodes) {
-		auto v = math_vertex(n);
-		if (done.find(v) != done.end()) {
-			continue;
-		}
-		int ncnt = v.get_edge_in_count();
-		for (int j = 0; j < ncnt; j++) {
-			auto edge = v.get_edge_in(j);
-			if (edge.v.use_count() <= 2 && !edge.is_constant()) {
 
-				//	v.v.properties().name = edge.v.properties().name;
-				break;
+	std::set<math_vertex> list;
+	for (auto n : nodes) {
+		if (math_vertex(n).v.properties().op != CON) {
+			list.insert(n);
+		}
+	}
+
+	while (list.size()) {
+		std::vector<math_vertex> candidates;
+		for (auto i = list.begin(); i != list.end(); i++) {
+			auto V = *i;
+			bool ready = true;
+			for (int i = 0; i < V.v.get_edge_in_count(); i++) {
+				if (list.find(V.v.get_edge_in(i)) != list.end()) {
+					ready = false;
+					break;
+				}
+			}
+			if (ready) {
+				candidates.push_back(V);
 			}
 		}
+		auto V = candidates.front();
 		std::vector<math_vertex> in;
-		for (int k = 0; k < v.get_edge_in_count(); k++) {
-			in.push_back(v.get_edge_in(k));
-			assert(done.find(v.get_edge_in(k)) != done.end());
-
+		for (int k = 0; k < V.v.get_edge_in_count(); k++) {
+			in.push_back(V.v.get_edge_in(k));
 		}
-		code += v.v.properties().print_code(in);
-		v.v.free_edges();
-		done.insert(v);
+		code += V.v.properties().print_code(in);
+		V.v.free_edges();
+		list.erase(V);
 	}
+
+	/*	std::vector<math_vertex> S;
+	 for (auto o : outputs) {
+	 S.push(o);
+	 }
+	 while (S.size()) {
+	 auto v = S.top();
+	 S.pop();
+	 if (visited.find(v) == visited.end()) {
+	 visited.insert(v);
+	 }
+	 }
+	 for (auto n : nodes) {
+	 auto v = math_vertex(n);
+	 if (done.find(v) != done.end()) {
+	 continue;
+	 }
+	 std::vector<math_vertex> in;
+	 for (int k = 0; k < v.get_edge_in_count(); k++) {
+	 in.push_back(v.get_edge_in(k));
+	 assert(done.find(v.get_edge_in(k)) != done.end());
+	 }
+	 code += v.v.properties().print_code(in);
+	 v.v.free_edges();
+	 done.insert(v);
+	 }*/
 	auto decls = db->get_declarations();
 
 	int stacksz = db->size() * 32;
@@ -526,12 +560,12 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
 		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
 		int index = num;
-		if( index == 0 ) {
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ")").c_str(), areg.c_str());
+		if (index == 0) {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ")").c_str(), areg.c_str());
 			code += ptr;
 			free(ptr);
 		} else {
-			if( index == 1 ) {
+			if (index == 1) {
 				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", (std::string("(") + basename + ", " + stride + ", 8)").c_str(), areg.c_str());
 				code += ptr;
 				free(ptr);
@@ -583,12 +617,12 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
 		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
 		int index = num;
-		if( index == 0 ) {
-			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", areg.c_str(), (std::string("(") + basename +")").c_str());
+		if (index == 0) {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", areg.c_str(), (std::string("(") + basename + ")").c_str());
 			code += ptr;
 			free(ptr);
 		} else {
-			if( index == 1 ) {
+			if (index == 1) {
 				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovupd", areg.c_str(), (std::string("(") + basename + ", " + stride + ", 8)").c_str());
 				code += ptr;
 				free(ptr);

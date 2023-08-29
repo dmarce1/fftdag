@@ -28,7 +28,8 @@ std::string name_server::current_name(std::string nm) const {
 }
 
 std::string name_server::get_register(std::string mem, std::string& code, bool noload) {
-	assert(mem[0] != 'C');
+	//assert(mem.size());
+	//assert(mem[0] != 'C');
 	assert(mem[0] != '%');
 	if (mem2reg->find(mem) != mem2reg->end()) {
 		return (*mem2reg)[mem];
