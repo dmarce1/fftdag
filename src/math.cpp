@@ -469,7 +469,30 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 				candidates.push_back(V);
 			}
 		}
-		auto V = candidates.front();
+		int best_score = std::numeric_limits<int>::min();
+		math_vertex best;
+		for (auto V : candidates) {
+			int score = 0;
+			if (V.v.properties().op == IN) {
+				score = 100000;
+			} else {
+				for (int i = 0; i < V.v.get_edge_in_count(); i++) {
+					if (V.v.get_edge_in(i).properties().name) {
+						if (db->current_name(*V.v.get_edge_in(i).properties().name)[0] == '%') {
+							score++;
+						}
+					}
+					if (V.v.get_edge_in(i).use_count() == 2) {
+						score++;
+					}
+				}
+			}
+			if (score > best_score) {
+				best_score = score;
+				best = V;
+			}
+		}
+		auto V = best;
 		std::vector<math_vertex> in;
 		for (int k = 0; k < V.v.get_edge_in_count(); k++) {
 			in.push_back(V.v.get_edge_in(k));
