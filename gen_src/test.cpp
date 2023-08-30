@@ -36,7 +36,7 @@ void operator delete[](void *p) {
 	free(p);
 }
 
-#define SIMD_SIZE 4
+#define SIMD_SIZE 1
 
 int round_down(int i, int m) {
 	return m * (i / m);
@@ -284,18 +284,18 @@ timer tm1, tm2, tm3, tm4;
 
 void FFT(std::vector<complex<double>>& Z) {
 	int N = Z.size();
-	std::vector<double> Y(4 * N);
-	std::vector<double> X(4 * N);
-	for (int i = 0; i < 4 * N; i++) {
-		X[i] = Z[i / 4].real();
-		Y[i] = Z[i / 4].imag();
+	std::vector<double> Y(SIMD_SIZE * N);
+	std::vector<double> X(SIMD_SIZE * N);
+	for (int i = 0; i < SIMD_SIZE * N; i++) {
+		X[i] = Z[i / SIMD_SIZE].real();
+		Y[i] = Z[i / SIMD_SIZE].imag();
 	}
 	tm2.start();
-	sfft_complex(X.data(), Y.data(), 4, 4, N);
+	sfft_complex(X.data(), Y.data(), SIMD_SIZE, SIMD_SIZE, N);
 	tm2.stop();
-	for (int i = 0; i < 4 * N; i++) {
-		Z[i / 4].real() = X[i];
-		Z[i / 4].imag() = Y[i];
+	for (int i = 0; i < SIMD_SIZE * N; i++) {
+		Z[i / SIMD_SIZE].real() = X[i];
+		Z[i / SIMD_SIZE].imag() = Y[i];
 	}
 }
 

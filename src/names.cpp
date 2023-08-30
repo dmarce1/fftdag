@@ -2,6 +2,7 @@
 #include <cassert>
 #include <limits>
 #include <algorithm>
+#include "instructions.hpp"
 
 name_server::name_server() {
 	next_id = 0;
@@ -12,7 +13,7 @@ name_server::name_server() {
 	avail_regs = std::make_shared<std::set<std::string>>();
 	reg_q = std::make_shared<std::queue<std::string>>();
 	for (int n = 0; n < 16; n++) {
-		avail_regs->insert(std::string("%ymm") + std::to_string(n));
+		avail_regs->insert(std::string(simd_reg()) + std::to_string(n));
 	}
 }
 
@@ -59,7 +60,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 			reg = reg_q->front();
 			reg_q->pop();
 			if (reg2mem->find(reg) != reg2mem->end()) {
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovapd", reg.c_str(), (*reg2mem)[reg].c_str());
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), reg.c_str(), (*reg2mem)[reg].c_str());
 				code += ptr;
 				free(ptr);
 				mem2reg->erase((*reg2mem)[reg]);
@@ -70,7 +71,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 			reg_q->push(reg);
 		}
 		if (!noload) {
-			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovapd", mem.c_str(), reg.c_str());
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), mem.c_str(), reg.c_str());
 			code += ptr;
 			free(ptr);
 		}
@@ -99,7 +100,7 @@ name_server::name_ptr name_server::reserve_name(std::string name) {
 
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
-		auto new_name = std::string( "MEM") + &((std::to_string(next_id + 1000))[1]);
+		auto new_name = std::string("MEM") + &((std::to_string(next_id + 1000))[1]);
 		available->insert(std::move(new_name));
 		next_id++;
 	}
