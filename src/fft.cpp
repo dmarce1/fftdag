@@ -102,7 +102,23 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 			}
 		}
 	}
+	if (opts & FFT_DIT) {
+		for (int n = 1; n < N; n++) {
+			const auto r = x[n].x * math_vertex::Wr(n) - x[n].y * math_vertex::Wi(n);
+			const auto i = x[n].x * math_vertex::Wi(n) + x[n].y * math_vertex::Wr(n);
+			x[n].x = r;
+			x[n].y = i;
+		}
+	}
 	x = fft(x, N, opts, true);
+	if (opts & FFT_DIF) {
+		for (int n = 1; n < N; n++) {
+			const auto r = x[n].x * math_vertex::Wr(n) - x[n].y * math_vertex::Wi(n);
+			const auto i = x[n].x * math_vertex::Wi(n) + x[n].y * math_vertex::Wr(n);
+			x[n].x = r;
+			x[n].y = i;
+		}
+	}
 
 	if (opts & FFT_INV) {
 		if (opts & FFT_REAL) {
@@ -344,7 +360,7 @@ void print_fft_bests() {
 std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts, bool root) {
 	for (auto x : xin) {
 		x.x.set_goal();
-	x.y.set_goal();
+		x.y.set_goal();
 	}
 	if (N == 1) {
 		return xin;

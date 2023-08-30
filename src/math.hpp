@@ -19,7 +19,7 @@
 #include <stack>
 
 typedef enum {
-	INVALID, SUB, NEG, MUL, IN, CON, ADD, FMA, NFMA, FMS, NFMS
+	INVALID, SUB, NEG, MUL, IN, CON, ADD, TW, FMA, NFMA, FMS, NFMS
 } operation_t;
 
 typedef enum {
@@ -59,7 +59,6 @@ public:
 		int depth;
 		int group_id;
 		bool goal;
-		bool twiddle;
 		std::shared_ptr<value_number> vnum;
 		std::string print_code(const std::vector<math_vertex>& edges);
 		properties();
@@ -159,7 +158,7 @@ public:
 	static op_cnt_t operation_count(std::vector<math_vertex>);
 	static op_cnt_t operation_count(std::vector<cmplx>);
 	static std::vector<math_vertex> new_inputs(int cnt);
-	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices, bool cmpx, int simdsz, decimation_t dtype);
+	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices, bool cmpx, bool);
 	static void optimize(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A, const math_vertex& B);
@@ -181,6 +180,8 @@ public:
 	static std::unordered_map<value_number, cse_entry, value_key> cse;
 	static math_vertex tri_op(operation_t op, math_vertex A, math_vertex B, math_vertex C);
 	static math_vertex binary_op(operation_t op, math_vertex A, math_vertex B);
+	static math_vertex Wr(int k);
+	static math_vertex Wi(int k);
 	static math_vertex unary_op(operation_t op, math_vertex A);
 	static std::vector<math_vertex> essential_constants;
 	void set_database(const std::shared_ptr<name_server>& db);

@@ -337,9 +337,9 @@ int main(int argc, char **argv) {
 				double y = X[n].imag() - Y[n].imag();
 				double err = sqrt(x * x + y * y);
 				avg_err += err;
-		   //	printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
+		//   printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
 			}
-			//abort();
+		//	abort();
 		}
 		avg_err /= (255 * N);
 		auto pfac = prime_factorization(N);

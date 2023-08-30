@@ -7,7 +7,6 @@
 #include <cstring>
 #include <queue>
 
-
 bool is_additive(operation_t op) {
 	switch (op) {
 	case ADD:
@@ -94,7 +93,6 @@ math_vertex::properties::properties() {
 	cse = false;
 	depth = 0;
 	group_id = -1;
-	twiddle = false;
 	goal = false;
 	terminal = false;
 	iscmplxreal = iscmplximag = isreal = false;
@@ -155,6 +153,28 @@ math_vertex math_vertex::unary_op(operation_t op, math_vertex A) {
 }
 
 math_vertex::~math_vertex() {
+}
+
+math_vertex math_vertex::Wr(int k) {
+	math_vertex V;
+	properties props;
+	props.op = TW;
+	props.value = k;
+	props.name = std::make_shared<std::string>(std::string("COS") + std::to_string(k));
+	props.names = nullptr;
+	V.v = dag_vertex<properties>::new_(std::move(props));
+	return V;
+}
+
+math_vertex math_vertex::Wi(int k) {
+	math_vertex V;
+	properties props;
+	props.op = TW;
+	props.value = k;
+	props.name = std::make_shared<std::string>(std::string("SIN") + std::to_string(k));
+	props.names = nullptr;
+	V.v = dag_vertex<properties>::new_(std::move(props));
+	return V;
 }
 
 math_vertex::math_vertex(double constant) {
@@ -340,38 +360,35 @@ int math_vertex::get_group_id() const {
 	return v.properties().group_id;
 }
 
-std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, int simdsz, decimation_t deci) {
+std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, bool twiddles) {
 	std::string code;
 	int ncnt = 5;
 	std::pair<std::string, int> rc;
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n] = outputs[n].optimize_fma();
+		outputs[n].set_goal();
 		auto& props = outputs[n].v.properties();
-		if (!props.twiddle) {
-			props.iscmplxreal = props.iscmplximag = props.isreal = false;
-			props.terminal = true;
-			if (cmplx) {
-				props.num = n / 2;
-				props.iscmplximag = (n % 2 == 1);
-				props.iscmplxreal = (n % 2 == 0);
-			} else {
-				props.num = n;
-				props.isreal = true;
-			}
+		props.terminal = true;
+		props.iscmplxreal = props.iscmplximag = props.isreal = false;
+		if (cmplx) {
+			props.num = n / 2;
+			props.iscmplximag = (n % 2 == 1);
+			props.iscmplxreal = (n % 2 == 0);
+		} else {
+			props.num = n;
+			props.isreal = true;
 		}
 	}
 	for (int n = 0; n < inputs.size(); n++) {
 		auto& props = inputs[n].v.properties();
-		if (!props.twiddle) {
-			props.iscmplxreal = props.iscmplximag = props.isreal = false;
-			if (cmplx) {
-				props.num = n / 2;
-				props.iscmplximag = (n % 2 == 1);
-				props.iscmplxreal = (n % 2 == 0);
-			} else {
-				props.num = n;
-				props.isreal = true;
-			}
+		props.iscmplxreal = props.iscmplximag = props.isreal = false;
+		if (cmplx) {
+			props.num = n / 2;
+			props.iscmplximag = (n % 2 == 1);
+			props.iscmplxreal = (n % 2 == 0);
+		} else {
+			props.num = n;
+			props.isreal = true;
 		}
 		assert(props.op == IN);
 	}
@@ -423,15 +440,11 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		asprintf(&ptr, "%-15s%-15s%-25.17e\n", (nm + ":").c_str(), ".double", -0.0);
 		constants += ptr;
 		free(ptr);
-		asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -0.0);
-		constants += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -0.0);
-		constants += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -0.0);
-		constants += ptr;
-		free(ptr);
+		for (int w = 1; w < simd_width() >> 3; w++) {
+			asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -0.0);
+			constants += ptr;
+			free(ptr);
+		}
 	}
 	for (auto n : nodes) {
 		auto node = math_vertex(n);
@@ -442,15 +455,11 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 				asprintf(&ptr, "%-15s%-15s%-25.17e\n", (nm + ":").c_str(), ".double", node.v.properties().value);
 				constants += ptr;
 				free(ptr);
-				asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", node.v.properties().value);
-				constants += ptr;
-				free(ptr);
-				asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", node.v.properties().value);
-				constants += ptr;
-				free(ptr);
-				asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", node.v.properties().value);
-				constants += ptr;
-				free(ptr);
+				for (int w = 1; w < simd_width() >> 3; w++) {
+					asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", node.v.properties().value);
+					constants += ptr;
+					free(ptr);
+				}
 				node.v.properties().name = std::make_shared<std::string>(nm);
 			}
 			done.insert(node);
@@ -459,7 +468,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 
 	std::set<math_vertex> list;
 	for (auto n : nodes) {
-		if (math_vertex(n).v.properties().op != CON) {
+		if (math_vertex(n).v.properties().op != CON && math_vertex(n).v.properties().op != TW) {
 			list.insert(n);
 		}
 	}
@@ -482,7 +491,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		math_vertex best;
 		for (auto V : candidates) {
 			int score = 0;
-			if (V.v.properties().op == IN && !V.v.properties().twiddle) {
+			if (V.v.properties().op == IN) {
 				score = std::numeric_limits<int>::max();
 			} else {
 				for (int i = 0; i < V.v.get_edge_in_count(); i++) {
@@ -510,32 +519,35 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		V.v.free_edges();
 		list.erase(V);
 	}
+	for( auto o : outputs) {
+		const auto props = o.v.properties();
+		assert(props.op != IN);
+		auto A = *props.name;
+		auto areg = db->get_register(A, code, false);
+		char* ptr;
+		const char* basename = props.isreal ? "%rdi" : (props.iscmplxreal ? "%rdi" : "%rsi");
+		const char* stride = (props.isreal ? "%rsi" : (props.iscmplxreal ? "%rdx" : "%rcx"));
+		int index = props.num;
+		if (index == 0) {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ")").c_str());
+			code += ptr;
+			free(ptr);
+		} else {
+			if (index == 1) {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ", " + stride + ", 8)").c_str());
+				code += ptr;
+				free(ptr);
+			} else {
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str());
+				code += ptr;
+				free(ptr);
+			}
+		}
 
-	/*	std::vector<math_vertex> S;
-	 for (auto o : outputs) {
-	 S.push(o);
-	 }
-	 while (S.size()) {
-	 auto v = S.top();
-	 S.pop();
-	 if (visited.find(v) == visited.end()) {
-	 visited.insert(v);
-	 }
-	 }
-	 for (auto n : nodes) {
-	 auto v = math_vertex(n);
-	 if (done.find(v) != done.end()) {
-	 continue;
-	 }
-	 std::vector<math_vertex> in;
-	 for (int k = 0; k < v.get_edge_in_count(); k++) {
-	 in.push_back(v.get_edge_in(k));
-	 assert(done.find(v.get_edge_in(k)) != done.end());
-	 }
-	 code += v.v.properties().print_code(in);
-	 v.v.free_edges();
-	 done.insert(v);
-	 }*/
+	}
 	auto decls = db->get_declarations();
 
 	std::string defines;
@@ -557,33 +569,51 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			}
 		}
 	}
+	if (twiddles) {
+		char* ptr;
+		for (int n = 1; n < outputs.size() / 2; n++) {
+			asprintf(&ptr, "%-15s%-15s%s\n", "#define", (std::string("COS") + std::to_string(n)).c_str(), (std::to_string(simd_width() * 2 * n) + std::string("(%r8)")).c_str());
+			defines += ptr;
+			free(ptr);
+			asprintf(&ptr, "%-15s%-15s%s\n", "#define", (std::string("SIN") + std::to_string(n)).c_str(), (std::to_string(simd_width() * (2 * n + 1)) + std::string("(%r8)")).c_str());
+			defines += ptr;
+			free(ptr);
+		}
+	}
 	int stacksz = simd_width() * memnum;
 	std::string entry, exit;
 	char* ptr;
 	if (stacksz) {
-		asprintf(&ptr, "%15s%-15s%s\n", "", "push", "%rbp");
-		entry += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rsp", "%rbp");
-		entry += ptr;
-		free(ptr);
+		if (simd_width() >= 32) {
+			asprintf(&ptr, "%15s%-15s%s\n", "", "push", "%rbp");
+			entry += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rsp", "%rbp");
+			entry += ptr;
+			free(ptr);
+		}
 		asprintf(&ptr, "%15s%-15s$%i, %s\n", "", "sub", stacksz, "%rsp");
 		entry += ptr;
 		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "and", "$0xfffffffffffffc00", "%rsp");
-		entry += ptr;
-		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rbp", "%rsp");
+		asprintf(&ptr, "%15s%-15s$%i, %s\n", "", "add", stacksz, "%rsp");
 		exit += ptr;
 		free(ptr);
-		asprintf(&ptr, "%15s%-15s%s\n", "", "pop", "%rbp");
-		exit += ptr;
-		free(ptr);
+		if (simd_width() >= 32) {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "and", "$0xfffffffffffffc00", "%rsp");
+			entry += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rbp", "%rsp");
+			exit += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s\n", "", "pop", "%rbp");
+			exit += ptr;
+			free(ptr);
+		}
 	}
 	asprintf(&ptr, "%15s%-15s\n", "", "ret");
 	exit += ptr;
 	free(ptr);
-	code = defines + decls + entry + code + exit;
+	code = std::string("\n") + defines + std::string("\n") + decls + entry + code + exit;
 	rc.first = code;
 	rc.second = 0;
 	for (int i = 0; i < decls.size(); i++) {
@@ -592,8 +622,10 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		}
 	}
 	//rc.first += clear_registers();
-	rc.first += "               .align         " + std::to_string(simd_width()) + "\n";
-	rc.first += constants;
+	if (constants.size()) {
+		rc.first += "\n               .align         " + std::to_string(simd_width()) + "\n";
+		rc.first += constants;
+	}
 	rc.first = rc.first;
 	return std::move(rc);
 }
@@ -630,11 +662,7 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 			std::swap(b, c);
 			std::swap(B, C);
 		}
-		if (c.v.properties().op == CON) {
-			std::swap(b, c);
-			std::swap(B, C);
-		}
-		if (c.v.properties().twiddle) {
+		if (c.v.properties().op == CON || c.v.properties().op == TW) {
 			std::swap(b, c);
 			std::swap(B, C);
 		}
@@ -670,39 +698,35 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 		}
 
 	} else if (op == IN) {
-		if (twiddle) {
-			name = names->reserve_name(std::to_string(simd_width() * num) + std::string("(%r8)"));
+		if (name == nullptr) {
+			assert(names != nullptr);
+			name = names->generate_name();
+		}
+		auto A = *name;
+		auto areg = names->get_register(A, code, true);
+		char* ptr;
+		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
+		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
+		int index = num;
+		if (index == 0) {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), (std::string("(") + basename + ")").c_str(), areg.c_str());
+			code += ptr;
+			free(ptr);
 		} else {
-			if (name == nullptr) {
-				assert(names != nullptr);
-				name = names->generate_name();
-			}
-			auto A = *name;
-			auto areg = names->get_register(A, code, true);
-			char* ptr;
-			const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
-			const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
-			int index = num;
-			if (index == 0) {
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), (std::string("(") + basename + ")").c_str(), areg.c_str());
+			if (index == 1) {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), (std::string("(") + basename + ", " + stride + ", 8)").c_str(), areg.c_str());
 				code += ptr;
 				free(ptr);
 			} else {
-				if (index == 1) {
-					asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), (std::string("(") + basename + ", " + stride + ", 8)").c_str(), areg.c_str());
-					code += ptr;
-					free(ptr);
-				} else {
-					asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
-					code += ptr;
-					free(ptr);
-					asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str(), areg.c_str());
-					code += ptr;
-					free(ptr);
-				}
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str(), areg.c_str());
+				code += ptr;
+				free(ptr);
 			}
 		}
-	} else {
+	} else if (op != TW && op != CON) {
 		if (name == nullptr) {
 			assert(names != nullptr);
 			name = names->generate_name();
@@ -742,35 +766,34 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 			break;
 		}
 	}
-	if (terminal) {
-		assert(op != IN);
-		auto A = *name;
-		auto areg = names->get_register(A, code, true);
-		char* ptr;
-		const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
-		const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
-		int index = num;
-		if (index == 0) {
-			asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ")").c_str());
-			code += ptr;
-			free(ptr);
-		} else {
-			if (index == 1) {
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ", " + stride + ", 8)").c_str());
+	if (terminal && false) {
+			assert(op != IN);
+			auto A = *name;
+			auto areg = names->get_register(A, code, true);
+			char* ptr;
+			const char* basename = isreal ? "%rdi" : (iscmplxreal ? "%rdi" : "%rsi");
+			const char* stride = (isreal ? "%rsi" : (iscmplxreal ? "%rdx" : "%rcx"));
+			int index = num;
+			if (index == 0) {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ")").c_str());
 				code += ptr;
 				free(ptr);
 			} else {
-				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
-				code += ptr;
-				free(ptr);
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str());
-				code += ptr;
-				free(ptr);
+				if (index == 1) {
+					asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ", " + stride + ", 8)").c_str());
+					code += ptr;
+					free(ptr);
+				} else {
+					asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "imul", (std::string("$") + std::to_string(index)).c_str(), stride, "%rax");
+					code += ptr;
+					free(ptr);
+					asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), areg.c_str(), (std::string("(") + basename + ", " + "%rax" + ", 8)").c_str());
+					code += ptr;
+					free(ptr);
+				}
 			}
-		}
-		name = nullptr;
-	}
-	return code;
+			name = nullptr;
+		}	return code;
 }
 
 math_vertex::math_vertex(const dag_vertex<properties>& v0) {
@@ -805,7 +828,7 @@ bool math_vertex::check_cse() {
 	assert(valid());
 	value_number vn;
 	const auto op = v.properties().op;
-	if (op == CON || op == IN) {
+	if (op == CON || op == IN || op == TW) {
 		return false;
 	}
 	vn.op = op;
