@@ -59,6 +59,7 @@ public:
 		int depth;
 		int group_id;
 		bool goal;
+		bool twiddle;
 		std::shared_ptr<value_number> vnum;
 		std::string print_code(const std::vector<math_vertex>& edges);
 		properties();
@@ -172,7 +173,7 @@ public:
 	};
 	static void print_cse();
 	static void reset();
-private:
+public:
 	dag_vertex<properties> v;
 	bool check_cse();
 	static bool first_init;

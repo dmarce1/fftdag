@@ -78,6 +78,25 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 	}
 }
 
+name_server::name_ptr name_server::reserve_name(std::string name) {
+	auto ptr = new std::string(name);
+	auto nptr = std::shared_ptr<std::string>(ptr, [this](std::string* ptr) {
+		assert(in_use->find(*ptr) != in_use->end());
+		in_use->erase(*ptr);
+		available->insert(*ptr);
+		if( mem2reg->find(*ptr) != mem2reg->end()) {
+			reg2mem->erase((*mem2reg)[*ptr]);
+			avail_regs->insert((*mem2reg)[*ptr]);
+			mem2reg->erase(*ptr);
+		}
+		delete ptr;
+	});
+	assert(in_use->find(name) == in_use->end());
+	(*in_use)[name] = nptr;
+	return nptr;
+
+}
+
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
 		auto new_name = std::string( "MEM") + &((std::to_string(next_id + 1000))[1]);

@@ -21,7 +21,7 @@ public:
 	name_server();
 	name_ptr generate_name();
 	std::string get_register(std::string, std::string&, bool);
-	//std::pair<name_server::name_ptr, std::string> reserve_name(std::string name);
+	name_server::name_ptr reserve_name(std::string name);
 	std::string get_declarations() const;
 	std::string current_name(std::string nm) const;
 	void transfer_register(std::string reg, std::string from, std::string to) {
