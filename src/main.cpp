@@ -58,18 +58,10 @@ std::string apply_header(std::string code, std::string name) {
 	return rc;
 }
 
-std::string print_load(int N);
-std::string print_store(int N);
-
 int main(int argc, char **argv) {
 	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 	int cnt1 = 0;
 	int cnt2 = 0;
-
-	printf( "%s\n", print_store(25).c_str());
-
-	return 0;
-
 	fft_reset_cache();
 	fprintf( stderr, "------------------------------COMPLEX-------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
@@ -88,7 +80,7 @@ int main(int argc, char **argv) {
 	}
 
 
-	fft_reset_cache();
+	/*fft_reset_cache();
 	fprintf( stderr, "------------------------------REAL--------------------------------\n");
 	for (int N = Nmin; N <= Nmax; N++) {
 		auto inputs = math_vertex::new_inputs(N);
@@ -103,7 +95,7 @@ int main(int argc, char **argv) {
 		fclose(fp);
 		cnt1 += tmp.second;
 		cnt2 += cnt.total();
-	}
+	}*/
 	fft_reset_cache();
 	/*	fprintf( stderr, "------------------------------REAL INVERSE-------------------------\n");
 	 for (int N = Nmin; N <= Nmax; N++) {
@@ -127,6 +119,9 @@ int main(int argc, char **argv) {
 	fprintf( stderr, "O: %i D: %i\n", cnt2, cnt1);
 	system("cp ../../gen_src/main.cpp .\n");
 	system("cp ../../gen_src/test.cpp .\n");
+	system("cp ../../gen_src/load.S .\n");
+	system("cp ../../gen_src/store.S .\n");
+	system("cp ../../gen_src/twiddle.S .\n");
 	system("cp ../../gen_src/util.cpp .\n");
 	system("cp ../../gen_src/util.hpp .\n");
 	system("cp ../../gen_src/types.hpp .\n");
@@ -135,74 +130,51 @@ int main(int argc, char **argv) {
 	fprintf(fp, "#pragma once\n\n");
 	fprintf(fp, "#define FFT_NMAX %i\n", Nmax);
 	fprintf(fp, "#define FFT_NMIN %i\n\n", Nmin);
-	fprintf(fp, "#include <cassert>\n\n");
+	fprintf(fp, "#include <cassert>\n");
+	fprintf(fp, "#include <vector>\n\n");
 	fprintf(fp, "extern \"C\" {\n");
 
+	fprintf(fp, "void load_complex_scalar(double*, double*, double*, int, int);\n");
+	fprintf(fp, "void store_complex_scalar(double*, double*, double*, int, int);\n");
+
 	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "void sfft_complex_%i(double* xr, double* xi, size_t sr, size_t si);\n", n);
+		fprintf(fp, "void sfft_complex_%i(double*, double*);\n", n);
 	}
 	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "void sfft_real_%i(double* x, size_t s);\n", n);
-	}
-	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "void sfft_complex_dit_%i(double* xr, double* xi, double* wr, double* wi, size_t sr, size_t si);\n", n);
-	}
-	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "void sfft_complex_dif_%i(double* xr, double* xi, double* wr, double* wi, size_t sr, size_t si);\n", n);
+	//	fprintf(fp, "void sfft_real_%i(double*, double*);\n", n);
 	}
 	fprintf(fp, "}\n");
 	fprintf(fp, "\n");
-	fprintf(fp, "inline void sfft_complex(double* xr, double* xi, size_t sr, size_t si, size_t N) {\n");
+	fprintf(fp, "inline void sfft_complex(double* x, double* y, size_t s, size_t N) {\n");
+	fprintf(fp, "\tstatic std::vector<double> z;\n");
+	fprintf(fp, "\tz.resize(4 * N);\n");
+	fprintf(fp, "\tload_complex_scalar(x, y, z.data(), 1, N);\n");
 	fprintf(fp, "\tswitch(N) {\n");
 	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
 		fprintf(fp, "\tcase %i:\n", n);
-		fprintf(fp, "\t\tsfft_complex_%i(xr, xi, sr, si);\n", n);
+		fprintf(fp, "\t\tsfft_complex_%i(z.data(), z.data() + 2 * N);\n", n);
+		fprintf(fp, "\t\tbreak;\n");
+	}
+	fprintf(fp, "\tdefault:\n");
+	fprintf(fp, "\t\tassert(false);\n");
+	fprintf(fp, "\t}\n");
+	fprintf(fp, "\tstore_complex_scalar(x, y, z.data() + 2 * N, 1, N);\n");
+	fprintf(fp, "}\n");
+	fprintf(fp, "\n");
+/*	fprintf(fp, "\n");
+	fprintf(fp, "\n");
+	fprintf(fp, "inline void sfft_real(double* x, size_t N) {\n");
+	fprintf(fp, "\tswitch(N) {\n");
+	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+		fprintf(fp, "\tcase %i:\n", n);
+		fprintf(fp, "\t\tsfft_real_%i(x);\n", n);
 		fprintf(fp, "\t\tbreak;\n");
 	}
 	fprintf(fp, "\tdefault:\n");
 	fprintf(fp, "\t\tassert(false);\n");
 	fprintf(fp, "\t}\n");
 	fprintf(fp, "}\n");
-	fprintf(fp, "\n");
-	fprintf(fp, "\n");
-	fprintf(fp, "inline void sfft_complex_dit(double* xr, double* xi, double* wr, double* wi, size_t sr, size_t si, size_t N) {\n");
-	fprintf(fp, "\tswitch(N) {\n");
-	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "\tcase %i:\n", n);
-		fprintf(fp, "\t\tsfft_complex_dit_%i(xr, xi, wr, wi, sr, si);\n", n);
-		fprintf(fp, "\t\tbreak;\n");
-	}
-	fprintf(fp, "\tdefault:\n");
-	fprintf(fp, "\t\tassert(false);\n");
-	fprintf(fp, "\t}\n");
-	fprintf(fp, "}\n");
-	fprintf(fp, "\n");
-	fprintf(fp, "\n");
-	fprintf(fp, "inline void sfft_complex_dif(double* xr, double* xi, double* wr, double* wi, size_t sr, size_t si, size_t N) {\n");
-	fprintf(fp, "\tswitch(N) {\n");
-	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "\tcase %i:\n", n);
-		fprintf(fp, "\t\tsfft_complex_dif_%i(xr, xi, wr, wi, sr, si);\n", n);
-		fprintf(fp, "\t\tbreak;\n");
-	}
-	fprintf(fp, "\tdefault:\n");
-	fprintf(fp, "\t\tassert(false);\n");
-	fprintf(fp, "\t}\n");
-	fprintf(fp, "}\n");
-	fprintf(fp, "\n");
-	fprintf(fp, "\n");
-	fprintf(fp, "inline void sfft_real(double* x, size_t s, size_t N) {\n");
-	fprintf(fp, "\tswitch(N) {\n");
-	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-		fprintf(fp, "\tcase %i:\n", n);
-		fprintf(fp, "\t\tsfft_real_%i(x, s);\n", n);
-		fprintf(fp, "\t\tbreak;\n");
-	}
-	fprintf(fp, "\tdefault:\n");
-	fprintf(fp, "\t\tassert(false);\n");
-	fprintf(fp, "\t}\n");
-	fprintf(fp, "}\n");
-	fprintf(fp, "\n");
+	fprintf(fp, "\n");*/
 	fclose(fp);
 
 	fp = fopen("Makefile", "wt");
@@ -215,13 +187,13 @@ int main(int argc, char **argv) {
 		fprintf(fp, "fft.complex.%i.o ", n);
 	}
 	for (int n = Nmin; n <= Nmax; n++) {
-		fprintf(fp, "fft.real.%i.o ", n);
+//		fprintf(fp, "fft.real.%i.o ", n);
 	}
 	fprintf(fp, "\n%%.o: %%.S $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
 	fprintf(fp, "\n%%.o: %%.cpp $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
-	fprintf(fp, "ffttest: $(OBJ) util.o test.o\n");
+	fprintf(fp, "ffttest: $(OBJ) util.o test.o load.o store.o twiddle.o\n");
 	fprintf(fp, "\t$(CC) -o $@ $^ $(CFLAGS) -lfftw3\n");
 	fprintf(fp, "sfftlib.a: $(OBJ)\n");
 	fprintf(fp, "\tar -rcs sfftlib.a $(OBJ)\n");

@@ -35,6 +35,7 @@ public:
 	int size() const {
 		return next_id;
 	}
+	std::string free_regs();
 private:
 	std::shared_ptr<std::set<std::string>> available;
 	std::shared_ptr<std::unordered_map<std::string, std::weak_ptr<std::string>>> in_use;

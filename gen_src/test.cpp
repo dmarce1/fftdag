@@ -12,9 +12,9 @@
 #include "util.hpp"
 #include "types.hpp"
 
-void fft_complex_simd4(fft_simd4* X, int N) {
+/*void fft_complex_simd4(fft_simd4* X, int N) {
 	sfft_complex((double*) X, ((double*) X) + sizeof(fft_simd4), 2 * sizeof(fft_simd4), 2 * sizeof(fft_simd4), N);
-}
+}*/
 
 void * operator new(std::size_t n) {
 	void* memptr;
@@ -128,35 +128,6 @@ int cooley_tukey_radix(int N) {
 	}
 }
 
-void cooley_tukey(complex<fft_simd4>* X, complex<fft_simd4>* Y, int N) {
-	if (N <= FFT_NMAX) {
-		fft_complex_simd4((fft_simd4*) X, N);
-		return;
-	}
-	static std::vector<complex<fft_simd4>> z;
-	const auto& W = scalar_twiddles(N);
-	const int N1 = cooley_tukey_radix(N);
-	const int N2 = N / N1;
-	z.resize(N1);
-	for (int n1 = 0; n1 < N1; n1++) {
-		for (int n2 = 0; n2 < N2; n2++) {
-			Y[N2 * n1 + n2] = X[N1 * n2 + n1];
-		}
-	}
-	for (int n1 = 0; n1 < N1; n1++) {
-		cooley_tukey(Y + n1 * N2, X + n1 * N2, N2);
-	}
-	for (int k2 = 0; k2 < N2; k2++) {
-		z[0] = Y[k2];
-		for (int n1 = 1; n1 < N1; n1++) {
-			z[n1] = Y[N2 * n1 + k2] * W[n1 * k2];
-		}
-		fft_complex_simd4((fft_simd4*) (z.data()), N1);
-		for (int k1 = 0; k1 < N1; k1++) {
-			X[N2 * k1 + k2] = z[k1];
-		}
-	}
-}
 
 /*void cooley_tukey_s(complex<double>* X, complex<double>* Y, int N) {
  if (N <= FFT_NMAX) {
@@ -291,7 +262,7 @@ void FFT(std::vector<complex<double>>& Z) {
 		Y[i] = Z[i / SIMD_SIZE].imag();
 	}
 	tm2.start();
-	sfft_complex(X.data(), Y.data(), SIMD_SIZE, SIMD_SIZE, N);
+	sfft_complex(X.data(), Y.data(), SIMD_SIZE, N);
 	tm2.stop();
 	for (int i = 0; i < SIMD_SIZE * N; i++) {
 		Z[i / SIMD_SIZE].real() = X[i];
@@ -337,9 +308,9 @@ int main(int argc, char **argv) {
 				double y = X[n].imag() - Y[n].imag();
 				double err = sqrt(x * x + y * y);
 				avg_err += err;
-		   //	printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
+		  // printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
 			}
-			//abort();
+		//	abort();
 		}
 		avg_err /= (255 * N);
 		auto pfac = prime_factorization(N);

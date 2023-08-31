@@ -31,7 +31,7 @@ std::string name_server::current_name(std::string nm) const {
 
 std::string name_server::get_register(std::string mem, std::string& code, bool noload) {
 	//assert(mem.size());
-	//assert(mem[0] != 'C');
+	assert(mem[0] != 'C');
 	assert(mem[0] != '%');
 	if (mem2reg->find(mem) != mem2reg->end()) {
 		return (*mem2reg)[mem];
@@ -52,7 +52,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 			}
 			*reg_q = std::move(newq);
 			reg_q->push(reg);
-		} else {
+			} else {
 			if (!reg_q->size()) {
 				assert(false);
 				abort();
@@ -82,7 +82,6 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 name_server::name_ptr name_server::reserve_name(std::string name) {
 	auto ptr = new std::string(name);
 	auto nptr = std::shared_ptr<std::string>(ptr, [this](std::string* ptr) {
-		assert(in_use->find(*ptr) != in_use->end());
 		in_use->erase(*ptr);
 		available->insert(*ptr);
 		if( mem2reg->find(*ptr) != mem2reg->end()) {
@@ -92,11 +91,33 @@ name_server::name_ptr name_server::reserve_name(std::string name) {
 		}
 		delete ptr;
 	});
-	assert(in_use->find(name) == in_use->end());
 	(*in_use)[name] = nptr;
 	return nptr;
 
 }
+
+std::string name_server::free_regs() {
+	std::string code;
+	char* ptr;
+	for( auto i = reg2mem->begin(); i != reg2mem->end(); i++ ) {
+		auto reg = (*mem2reg)[i->second];
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), reg.c_str(), (*reg2mem)[reg].c_str());
+		code += ptr;
+		free(ptr);
+	}
+	next_id = 0;
+	available = std::make_shared<std::set<std::string>>();
+	in_use = std::make_shared<std::unordered_map<std::string, std::weak_ptr<std::string>>>();
+	reg2mem = std::make_shared<std::unordered_map<std::string, std::string>>();
+	mem2reg = std::make_shared<std::unordered_map<std::string, std::string>>();
+	avail_regs = std::make_shared<std::set<std::string>>();
+	reg_q = std::make_shared<std::queue<std::string>>();
+	for (int n = 0; n < 16; n++) {
+		avail_regs->insert(std::string(simd_reg()) + std::to_string(n));
+	}
+	return code;
+}
+
 
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
