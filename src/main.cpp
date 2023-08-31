@@ -58,26 +58,17 @@ std::string apply_header(std::string code, std::string name) {
 	return rc;
 }
 
-std::vector<math_vertex> apply_twiddles(std::vector<math_vertex> X, std::vector<math_vertex> W, int N) {
-
-	for (int n = 1; n < N; n++) {
-		W[2 * n].v.properties().iscmplxreal = true;
-		W[2 * n + 1].v.properties().iscmplximag = true;
-		W[2 * n].v.properties().num = 2 * n;
-		W[2 * n + 1].v.properties().num = 2 * n + 1;
-		W[2 * n].v.properties().twiddle = W[2 * n + 1].v.properties().twiddle = true;
-		math_vertex r = X[2 * n] * W[2 * n] - X[2 * n + 1] * W[2 * n + 1];
-		math_vertex i = X[2 * n + 1] * W[2 * n + 1] + X[2 * n + 1] * W[2 * n];
-		X[2 * n] = r;
-		X[2 * n + 1] = i;
-	}
-	return X;
-}
+std::string print_load(int N);
+std::string print_store(int N);
 
 int main(int argc, char **argv) {
 	feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 	int cnt1 = 0;
 	int cnt2 = 0;
+
+	printf( "%s\n", print_store(25).c_str());
+
+	return 0;
 
 	fft_reset_cache();
 	fprintf( stderr, "------------------------------COMPLEX-------------------------\n");
@@ -96,45 +87,6 @@ int main(int argc, char **argv) {
 		cnt2 += cnt.total();
 	}
 
-	fft_reset_cache();
-	fprintf( stderr, "------------------------------COMPLEX-DIT-------------------------\n");
-	for (int N = Nmin; N <= Nmax; N++) {
-		auto inputs = math_vertex::new_inputs(4 * N);
-		auto twinputs = std::vector<math_vertex>(inputs.begin() + 2 * N, inputs.begin() + 4 * N);
-		auto xinputs = std::vector<math_vertex>(inputs.begin(), inputs.begin() + 2 * N);
-		xinputs = apply_twiddles(xinputs, twinputs, N);
-		auto outputs = fft(xinputs, N, 0);
-		auto cnt = math_vertex::operation_count(outputs);
-		auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4, DIT);
-		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		std::string code = apply_header(tmp.first, std::string("sfft_complex_dit_") + std::to_string(N));
-		std::string fname = "fft.complex.dit." + std::to_string(N) + ".S";
-		FILE* fp = fopen(fname.c_str(), "wt");
-		fprintf(fp, "%s\n", code.c_str());
-		fclose(fp);
-		cnt1 += tmp.second;
-		cnt2 += cnt.total();
-	}
-
-	fft_reset_cache();
-	fprintf( stderr, "------------------------------COMPLEX-DIF-------------------------\n");
-	for (int N = Nmin; N <= Nmax; N++) {
-		auto inputs = math_vertex::new_inputs(4 * N);
-		auto twinputs = std::vector<math_vertex>(inputs.begin() + 2 * N, inputs.begin() + 4 * N);
-		auto xinputs = std::vector<math_vertex>(inputs.begin(), inputs.begin() + 2 * N);
-		auto outputs = fft(xinputs, N, 0);
-		outputs = apply_twiddles(outputs, twinputs, N);
-		auto cnt = math_vertex::operation_count(outputs);
-		auto tmp = math_vertex::execute_all(std::move(xinputs), outputs, true, 4, DIF);
-		fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
-		std::string code = apply_header(tmp.first, std::string("sfft_complex_dif_") + std::to_string(N));
-		std::string fname = "fft.complex.dif." + std::to_string(N) + ".S";
-		FILE* fp = fopen(fname.c_str(), "wt");
-		fprintf(fp, "%s\n", code.c_str());
-		fclose(fp);
-		cnt1 += tmp.second;
-		cnt2 += cnt.total();
-	}
 
 	fft_reset_cache();
 	fprintf( stderr, "------------------------------REAL--------------------------------\n");
@@ -261,12 +213,6 @@ int main(int argc, char **argv) {
 	fprintf(fp, "OBJ = ");
 	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.complex.%i.o ", n);
-	}
-	for (int n = Nmin; n <= Nmax; n++) {
-		fprintf(fp, "fft.complex.dit.%i.o ", n);
-	}
-	for (int n = Nmin; n <= Nmax; n++) {
-		fprintf(fp, "fft.complex.dif.%i.o ", n);
 	}
 	for (int n = Nmin; n <= Nmax; n++) {
 		fprintf(fp, "fft.real.%i.o ", n);

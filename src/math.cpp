@@ -7,7 +7,6 @@
 #include <cstring>
 #include <queue>
 
-
 bool is_additive(operation_t op) {
 	switch (op) {
 	case ADD:
@@ -94,7 +93,6 @@ math_vertex::properties::properties() {
 	cse = false;
 	depth = 0;
 	group_id = -1;
-	twiddle = false;
 	goal = false;
 	terminal = false;
 	iscmplxreal = iscmplximag = isreal = false;
@@ -340,6 +338,16 @@ int math_vertex::get_group_id() const {
 	return v.properties().group_id;
 }
 
+template<class ...Args>
+std::string print2str(const char* fmt, Args ...args) {
+	std::string rc;
+	char *ptr;
+	asprintf(&ptr, fmt, args...);
+	rc = ptr;
+	free(ptr);
+	return rc;
+}
+
 std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, int simdsz, decimation_t deci) {
 	std::string code;
 	int ncnt = 5;
@@ -347,32 +355,30 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n] = outputs[n].optimize_fma();
 		auto& props = outputs[n].v.properties();
-		if (!props.twiddle) {
-			props.iscmplxreal = props.iscmplximag = props.isreal = false;
-			props.terminal = true;
-			if (cmplx) {
-				props.num = n / 2;
-				props.iscmplximag = (n % 2 == 1);
-				props.iscmplxreal = (n % 2 == 0);
-			} else {
-				props.num = n;
-				props.isreal = true;
-			}
+		props.iscmplxreal = props.iscmplximag = props.isreal = false;
+		props.terminal = true;
+		if (cmplx) {
+			props.num = n / 2;
+			props.iscmplximag = (n % 2 == 1);
+			props.iscmplxreal = (n % 2 == 0);
+		} else {
+			props.num = n;
+			props.isreal = true;
 		}
+
 	}
 	for (int n = 0; n < inputs.size(); n++) {
 		auto& props = inputs[n].v.properties();
-		if (!props.twiddle) {
-			props.iscmplxreal = props.iscmplximag = props.isreal = false;
-			if (cmplx) {
-				props.num = n / 2;
-				props.iscmplximag = (n % 2 == 1);
-				props.iscmplxreal = (n % 2 == 0);
-			} else {
-				props.num = n;
-				props.isreal = true;
-			}
+		props.iscmplxreal = props.iscmplximag = props.isreal = false;
+		if (cmplx) {
+			props.num = n / 2;
+			props.iscmplximag = (n % 2 == 1);
+			props.iscmplxreal = (n % 2 == 0);
+		} else {
+			props.num = n;
+			props.isreal = true;
 		}
+
 		assert(props.op == IN);
 	}
 	auto db = outputs[0].v.properties().names;
@@ -482,7 +488,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		math_vertex best;
 		for (auto V : candidates) {
 			int score = 0;
-			if (V.v.properties().op == IN && !V.v.properties().twiddle) {
+			if (V.v.properties().op == IN) {
 				score = std::numeric_limits<int>::max();
 			} else {
 				for (int i = 0; i < V.v.get_edge_in_count(); i++) {
@@ -598,6 +604,214 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	return std::move(rc);
 }
 
+std::string print_load(int N) {
+	std::string code;
+	code += print2str("%15s\n", (std::string("load_complex_") + std::to_string(N) + ":").c_str());
+	code += print2str("%15s%-15s%s, %s, %s\n", "", "imul", "$8", "%rdx", "%r8");
+	if (N >= 4) {
+		code += print2str("%15s%-15s%s, %s, %s\n", "", "imul", "$24", "%rdx", "%r9");
+		if (N >= 6) {
+			code += print2str("%15s%-15s%s, %s, %s\n", "", "imul", "$48", "%rdx", "%r10");
+			if (N >= 8) {
+				code += print2str("%15s%-15s%s, %s, %s\n", "", "imul", "$60", "%rdx", "%r11");
+			}
+		}
+	}
+	if (N > 7) {
+		code += print2str("%15s%-15s%s\n", "", "push", "%rdi");
+	}
+	for (int n = 0; n < std::min(N, 7); n += 7) {
+		code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi)", simd_reg(0).c_str());
+		code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi)", simd_reg(1).c_str());
+		if (n + 1 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r8)", simd_reg(2).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r8)", simd_reg(3).c_str());
+		}
+		if (n + 2 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r8, 2)", simd_reg(4).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r8, 2)", simd_reg(5).c_str());
+		}
+		if (n + 3 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r9)", simd_reg(6).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r9)", simd_reg(7).c_str());
+		}
+		if (n + 4 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r8, 4)", simd_reg(8).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r8, 4)", simd_reg(9).c_str());
+		}
+		if (n + 5 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r10)", simd_reg(10).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r10)", simd_reg(11).c_str());
+		}
+		if (n + 6 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r9, 2)", simd_reg(12).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r9, 2)", simd_reg(13).c_str());
+		}
+		if (n + 7 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", "lea", "(%rdi, %r11)", "%rdi");
+			code += print2str("%15s%-15s%s, %s\n", "", "lea", "(%rsi, %r11)", "%rsi");
+		}
+	}
+	const auto rbp = [](int n) {
+		return std::to_string((n - 14) * simd_width()) + "(%rax)";
+	};
+	for (int n = 7; n < N; n += 7) {
+		code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi)", simd_reg(14).c_str());
+		code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi)", simd_reg(15).c_str());
+		code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * n).c_str());
+		code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * n + 1).c_str());
+		if (n + 1 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r8)", simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r8)", simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 1)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 1) + 1).c_str());
+		}
+		if (n + 2 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r8, 2)", simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r8, 2)", simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 2)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 2) + 1).c_str());
+		}
+		if (n + 3 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r9)", simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r9)", simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 3)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 3) + 1).c_str());
+		}
+		if (n + 4 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r8, 4)", simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r8, 4)", simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 4)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 4) + 1).c_str());
+		}
+		if (n + 5 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r10)", simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r10)", simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 5)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 5) + 1).c_str());
+		}
+		if (n + 6 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rdi, %r9, 2)", simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), "(%rsi, %r9, 2)", simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 6)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 6) + 1).c_str());
+		}
+		if (n + 7 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", "lea", "(%rdi, %r11)", "%rdi");
+			code += print2str("%15s%-15s%s, %s\n", "", "lea", "(%rsi, %r11)", "%rsi");
+		}
+	}
+	if (N > 7) {
+		code += print2str("%15s%-15s%s, %s\n", "", "pop", "%rdi");
+		code += print2str("%15s%-15s\n", "", "ret");
+	}
+	return code;
+}
+
+std::string print_store(int N) {
+	std::string code;
+	code += print2str("%15s\n", (std::string("store_complex_") + std::to_string(N) + ":").c_str());
+	code += print2str("%15s%-15s%s, %s, %s\n", "", "imul", "$8", "%rdx", "%r8");
+	if (N >= 4) {
+		code += print2str("%15s%-15s%s, %s, %s\n", "", "imul", "$24", "%rdx", "%r9");
+		if (N >= 6) {
+			code += print2str("%15s%-15s%s, %s, %s\n", "", "imul", "$48", "%rdx", "%r10");
+			if (N >= 8) {
+				code += print2str("%15s%-15s%s, %s, %s\n", "", "imul", "$60", "%rdx", "%r11");
+			}
+		}
+	}
+	if (N > 7) {
+		code += print2str("%15s%-15s%s\n", "", "push", "%rdi");
+	}
+	for (int n = 0; n < std::min(N, 7); n += 7) {
+		code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(0).c_str(), "(%rdi)");
+		code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(1).c_str(), "(%rsi)");
+		if (n + 1 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(2).c_str(), "(%rdi, %r8)");
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(3).c_str(), "(%rsi, %r8)");
+		}
+		if (n + 2 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(4).c_str(), "(%rdi, %r8, 2)");
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(5).c_str(), "(%rsi, %r8, 2)");
+		}
+		if (n + 3 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(6).c_str(), "(%rdi, %r9)");
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(7).c_str(), "(%rsi, %r9)");
+		}
+		if (n + 4 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(8).c_str(), "(%rdi, %r8, 4)");
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(9).c_str(), "(%rsi, %r8, 4)");
+		}
+		if (n + 5 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(10).c_str(), "(%rdi, %r10)");
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(11).c_str(), "(%rsi, %r10)");
+		}
+		if (n + 6 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(12).c_str(), "(%rdi, %r9, 2)");
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(13).c_str(), "(%rsi, %r9, 2)");
+		}
+		if (n + 7 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", "lea", "(%rdi, %r11)", "%rdi");
+			code += print2str("%15s%-15s%s, %s\n", "", "lea", "(%rsi, %r11)", "%rsi");
+		}
+	}
+	const auto rbp = [](int n) {
+		return std::to_string((n - 14) * simd_width()) + "(%rax)";
+	};
+	for (int n = 7; n < N; n += 7) {
+		code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * n).c_str(), simd_reg(14).c_str());
+		code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * n + 1).c_str(), simd_reg(15).c_str());
+		code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(14).c_str(), "(%rdi)");
+		code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(15).c_str(), "(%rsi)");
+		if (n + 1 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 1)).c_str(), simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 1) + 1).c_str(), simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(2).c_str(), "(%rdi, %r8)");
+			code += print2str("%15s%-15s%s, %s\n", "", movu_op(), simd_reg(3).c_str(), "(%rsi, %r8)");
+		}
+		if (n + 2 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 2)).c_str(), simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 2) + 1).c_str(), simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 2)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 2) + 1).c_str());
+		}
+		if (n + 3 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 3)).c_str(), simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 3) + 1).c_str(), simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 3)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 3) + 1).c_str());
+		}
+		if (n + 4 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 4)).c_str(), simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 4) + 1).c_str(), simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 4)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 4) + 1).c_str());
+		}
+		if (n + 5 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 5)).c_str(), simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 5) + 1).c_str(), simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 5)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 5) + 1).c_str());
+		}
+		if (n + 6 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 6)).c_str(), simd_reg(14).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), rbp(2 * (n + 6) + 1).c_str(), simd_reg(15).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rbp(2 * (n + 6)).c_str());
+			code += print2str("%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), rbp(2 * (n + 6) + 1).c_str());
+		}
+		if (n + 7 < N) {
+			code += print2str("%15s%-15s%s, %s\n", "", "lea", "(%rdi, %r11)", "%rdi");
+			code += print2str("%15s%-15s%s, %s\n", "", "lea", "(%rsi, %r11)", "%rsi");
+		}
+	}
+	if (N > 7) {
+		code += print2str("%15s%-15s%s, %s\n", "", "pop", "%rdi");
+		code += print2str("%15s%-15s\n", "", "ret");
+	}
+	return code;
+}
+
 std::string math_vertex::properties::print_code(const std::vector<math_vertex>& edges) {
 	std::string code;
 	if (is_fma(op)) {
@@ -631,10 +845,6 @@ std::string math_vertex::properties::print_code(const std::vector<math_vertex>& 
 			std::swap(B, C);
 		}
 		if (c.v.properties().op == CON) {
-			std::swap(b, c);
-			std::swap(B, C);
-		}
-		if (c.v.properties().twiddle) {
 			std::swap(b, c);
 			std::swap(B, C);
 		}

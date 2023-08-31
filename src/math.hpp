@@ -59,7 +59,6 @@ public:
 		int depth;
 		int group_id;
 		bool goal;
-		bool twiddle;
 		std::shared_ptr<value_number> vnum;
 		std::string print_code(const std::vector<math_vertex>& edges);
 		properties();

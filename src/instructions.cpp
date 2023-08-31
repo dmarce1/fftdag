@@ -1,4 +1,4 @@
-
+#include <string>
 //#define SIMD4
 //#define SIMD2
 #define SCALAR
@@ -41,6 +41,7 @@ const char* fma_post() {
 const char* simd_reg() {
 	return "%ymm";
 }
+
 
 
 #endif
@@ -128,4 +129,7 @@ const char* simd_reg() {
 
 
 #endif
+std::string simd_reg(int i) {
+	return std::string(simd_reg()) + std::to_string(i);
+}
 

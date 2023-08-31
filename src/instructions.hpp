@@ -19,5 +19,6 @@ const char* mul_op();
 const char* xor_op();
 const char* fma_post();
 const char* simd_reg();
+std::string  simd_reg(int i);
 
 #endif /* INSTRUCTIONS_HPP_ */
