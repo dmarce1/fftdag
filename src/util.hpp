@@ -16,7 +16,7 @@
 #include <vector>
 #include <complex>
 
-inline bool close2(double a, double b ) {
+inline bool close2(double a, double b) {
 	return std::abs(a - b) < 1.0e-10;
 }
 int least_prime_factor(int N);
@@ -36,5 +36,7 @@ const std::vector<std::complex<double>> twiddles(int N);
 const std::vector<std::complex<double>> raders_twiddle(int N, int M, bool padded);
 bool are_coprime(int a, int b);
 std::vector<std::complex<double>> chirp_z_filter(int N);
-
+inline int round_up(int i, int N) {
+	return N * ((i - 1) / N + 1);
+}
 #endif

@@ -109,17 +109,14 @@ int main(int argc, char **argv) {
 
 		fprintf(fp, "void sfft_perf_shuf_w%i(double* x, double* y);", width);
 		fprintf(fp, "void sfft_inv_perf_shuf_w%i(double* x, double* y);", width);
-		fprintf(fp, "void sfft_load_complex_w%i(double*, double*, double*, int, int);\n", width);
-		fprintf(fp, "void sfft_twiddle_w%i(double*, const double*, int, int);\n", width);
-		fprintf(fp, "void sfft_store_complex_w%i(double*, double*, double*, int, int);\n", width);
 
 		for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-			fprintf(fp, "void sfft_complex_w%i_%i(double*, double*);\n", width, n);
+			fprintf(fp, "void sfft_complex_w%i_%i(double*, double*, int, int);\n", width, n);
 		}
 		for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
 			//	fprintf(fp, "void sfft_real_w%i_%i(double*, double*);\n", width, n);
 		}
-		fprintf(fp, "void sfft_complex_w%i(double* x, double* y, int N);\n", width);
+		fprintf(fp, "void sfft_complex_w%i(double* x, double* y, int, int, int);\n", width);
 	}
 	fprintf(fp, "}\n");
 	fclose(fp);
@@ -138,24 +135,26 @@ int main(int argc, char **argv) {
 
 	fp = fopen("Makefile", "wt");
 	fprintf(fp, "CC=g++\n");
+	//	fprintf(fp, "CFLAGS=-I. -Ofast -march=native\n");
+	fprintf(fp, "CFLAGS=-I. -g -fsanitize=address -D_GLIBCXX_DEBUG -march=native\n");
 	fprintf(fp, "DEPS = sfft.hpp\n");
 	fprintf(fp, "OBJ = ");
-	for (int w = 1; w <= 4; w *= 2) {
-		for (int n = Nmin; n <= Nmax; n++) {
-			fprintf(fp, "fft.complex.w%i.%i.o ", w, n);
-		}
+	for (int n = Nmin; n <= Nmax; n++) {
+		fprintf(fp, "fft.complex.w1.%i.o ", n);
+		fprintf(fp, "fft.complex.w2.%i.o ", n);
+		fprintf(fp, "fft.complex.w4.%i.o ", n);
 	}
 	for (int n = Nmin; n <= Nmax; n++) {
-//		fprintf(fp, "fft.real.%i.o ", n);
+		//		fprintf(fp, "fft.real.%i.o ", n);
 	}
 	fprintf(fp, "\n%%.o: %%.S $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
 	fprintf(fp, "\n%%.o: %%.cpp $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
-//	fprintf(fp, "ffttest: $(OBJ) util.o test.o\n");
-//	fprintf(fp, "\t$(CC) -o $@ $^ $(CFLAGS) -lfftw3 -lsfft\n");
-	fprintf(fp, "libsfft.a: shuffle.o load.o store.o twiddle.o sfft_complex.o $(OBJ)\n");
-	fprintf(fp, "\tar -rcs libsfft.a shuffle.o load.o store.o twiddle.o sfft_complex.o $(OBJ)\n");
+	fprintf(fp, "ffttest: $(OBJ) util.o test.o load.o sfft_complex.o store.o twiddle.o\n");
+	fprintf(fp, "\t$(CC) -o $@ $^ $(CFLAGS) -lfftw3\n");
+	fprintf(fp, "sfftlib.a: $(OBJ)\n");
+	fprintf(fp, "\tar -rcs sfftlib.a $(OBJ)\n");
 	fclose(fp);
 	print_fft_bests();
 	return 0;

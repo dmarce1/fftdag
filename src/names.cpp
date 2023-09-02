@@ -12,7 +12,7 @@ name_server::name_server() {
 	mem2reg = std::make_shared<std::unordered_map<std::string, std::string>>();
 	avail_regs = std::make_shared<std::set<std::string>>();
 	reg_q = std::make_shared<std::queue<std::string>>();
-	for (int n = 0; n < 16; n++) {
+	for (int n = 0; n < 14; n++) {
 		avail_regs->insert(std::string(simd_reg()) + std::to_string(n));
 	}
 }
@@ -52,7 +52,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 			}
 			*reg_q = std::move(newq);
 			reg_q->push(reg);
-			} else {
+		} else {
 			if (!reg_q->size()) {
 				assert(false);
 				abort();
@@ -79,6 +79,8 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 	}
 }
 
+
+
 name_server::name_ptr name_server::reserve_name(std::string name) {
 	auto ptr = new std::string(name);
 	auto nptr = std::shared_ptr<std::string>(ptr, [this](std::string* ptr) {
@@ -96,28 +98,73 @@ name_server::name_ptr name_server::reserve_name(std::string name) {
 
 }
 
+name_server::name_ptr name_server::change_name(std::string& code, std::string from, std::string to) {
+	char* ptr;
+	if (from == to) {
+		return name_server::name_ptr((*in_use)[from]);
+	}
+	if (in_use->find(to) != in_use->end()) {
+		std::swap(*name_server::name_ptr((*in_use)[to]), *name_server::name_ptr((*in_use)[from]));
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), current_name(from).c_str(), simd_reg(14).c_str());
+		code += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), current_name(to).c_str(), simd_reg(15).c_str());
+		code += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), current_name(from).c_str());
+		code += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), current_name(to).c_str());
+		code += ptr;
+		free(ptr);
+		if( (*mem2reg)[from] == (*mem2reg)[to]) {
+			std::swap((*mem2reg)[from], (*mem2reg)[to]);
+			(*reg2mem)[(*mem2reg)[from]] = from;
+			(*reg2mem)[(*mem2reg)[to]] = to;
+		}
+		std::swap(*name_server::name_ptr((*in_use)[to]), *name_server::name_ptr((*in_use)[from]));
+		return name_server::name_ptr((*in_use)[to]);
+	} else if (available->find(to) != available->end()) {
+		available->erase(to);
+		auto nptr = std::shared_ptr<std::string>(new std::string(to), [this](std::string* ptr) {
+			if(in_use->find(*ptr) == in_use->end()) {
+				printf( "Can't find %s to erase it\n", ptr->c_str());
+				assert(false);
+			}
+			in_use->erase(*ptr);
+			available->insert(*ptr);
+			if( mem2reg->find(*ptr) != mem2reg->end()) {
+				reg2mem->erase((*mem2reg)[*ptr]);
+				avail_regs->insert((*mem2reg)[*ptr]);
+				mem2reg->erase(*ptr);
+			}
+			delete ptr;
+		});
+		(*in_use)[to] = nptr;
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), current_name(from).c_str(), simd_reg(15).c_str());
+		code += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), current_name(to).c_str());
+		code += ptr;
+		free(ptr);
+		return nptr;
+	} else {
+		assert(false);
+	}
+
+}
+
 std::string name_server::free_regs() {
 	std::string code;
 	char* ptr;
-	for( auto i = reg2mem->begin(); i != reg2mem->end(); i++ ) {
+	for (auto i = reg2mem->begin(); i != reg2mem->end(); i++) {
 		auto reg = (*mem2reg)[i->second];
 		asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), reg.c_str(), (*reg2mem)[reg].c_str());
 		code += ptr;
 		free(ptr);
 	}
-	next_id = 0;
-	available = std::make_shared<std::set<std::string>>();
-	in_use = std::make_shared<std::unordered_map<std::string, std::weak_ptr<std::string>>>();
-	reg2mem = std::make_shared<std::unordered_map<std::string, std::string>>();
-	mem2reg = std::make_shared<std::unordered_map<std::string, std::string>>();
-	avail_regs = std::make_shared<std::set<std::string>>();
-	reg_q = std::make_shared<std::queue<std::string>>();
-	for (int n = 0; n < 16; n++) {
-		avail_regs->insert(std::string(simd_reg()) + std::to_string(n));
-	}
 	return code;
 }
-
 
 name_server::name_ptr name_server::generate_name() {
 	if (available->empty()) {
@@ -127,9 +174,13 @@ name_server::name_ptr name_server::generate_name() {
 	}
 	std::string name = *(available->begin());
 	available->erase(name);
+	assert(in_use->find(name) == in_use->end());
 	auto ptr = new std::string(name);
 	auto nptr = std::shared_ptr<std::string>(ptr, [this](std::string* ptr) {
-		assert(in_use->find(*ptr) != in_use->end());
+		if(in_use->find(*ptr) == in_use->end()) {
+			printf( "Can't find %s to erase it\n", ptr->c_str());
+			assert(false);
+		}
 		in_use->erase(*ptr);
 		available->insert(*ptr);
 		if( mem2reg->find(*ptr) != mem2reg->end()) {

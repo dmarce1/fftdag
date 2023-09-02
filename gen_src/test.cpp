@@ -254,23 +254,9 @@ timer tm1, tm2, tm3, tm4;
 
 void FFT(std::vector<complex<double>>& ZZ) {
 	int N = ZZ.size();
-	std::vector<double> Y(SIMD_SIZE * N);
-	std::vector<double> X(SIMD_SIZE * N);
-	for (int i = 0; i < SIMD_SIZE * N; i++) {
-		X[i] = ZZ[i / SIMD_SIZE].real();
-		Y[i] = ZZ[i / SIMD_SIZE].imag();
-	}
-	static std::vector<double> Z;
-	Z.resize(4 * N);
 	tm2.start();
-	sfft_load_complex_w1(X.data(), Y.data(), Z.data(), 1, N);
-	sfft_complex_w1(Z.data(), Z.data() + 2 * N, N);
-	sfft_store_complex_w1(X.data(), Y.data(), Z.data() + 2 * N, 1, N);
+	sfft_complex_w1((double*) ZZ.data(), ((double*) ZZ.data()) + 1, 2, N, N);
 	tm2.stop();
-	for (int i = 0; i < SIMD_SIZE * N; i++) {
-		ZZ[i / SIMD_SIZE].real() = X[i];
-		ZZ[i / SIMD_SIZE].imag() = Y[i];
-	}
 }
 
 double rand1() {
@@ -287,11 +273,12 @@ int main(int argc, char **argv) {
 			std::vector<complex<double>> X(N);
 			std::vector<std::complex<double>> Y(N);
 			for (int n = 0; n < N; n++) {
+				Y[n].real(X[n].real() = 0);
+				Y[n].imag(X[n].imag() = 0);
 				Y[n].real(X[n].real() = rand1());
 				Y[n].imag(X[n].imag() = rand1());
-				//Y[n].real(X[n].real() = rand1());
-//				Y[n].imag(X[n].imag() = rand1());
 			}
+			Y[0].real(X[0].real() = 1);
 			if (i != 0) {
 				tm1.start();
 				tm3.start();
@@ -311,9 +298,9 @@ int main(int argc, char **argv) {
 				double y = X[n].imag() - Y[n].imag();
 				double err = sqrt(x * x + y * y);
 				avg_err += err;
-				// printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
+		//		printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
 			}
-			//	abort();
+	//		abort();
 		}
 		avg_err /= (255 * N);
 		auto pfac = prime_factorization(N);
