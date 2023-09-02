@@ -3,132 +3,48 @@
 //#define SIMD2
 #define SCALAR
 
-#ifdef SIMD4
+static int width = 4;
+
+void set_simd_width(int w) {
+	width = w;
+}
 
 int simd_width() {
-	return 32;
-}
-
-
-const char* mova_op() {
-	return "vmovapd";
-}
-
-const char* movu_op() {
-	return "vmovupd";
-}
-
-const char* add_op() {
-	return "vaddpd";
-}
-
-const char* sub_op() {
-	return "vsubpd";
-}
-
-const char* mul_op() {
-	return "vmulpd";
-}
-
-const char* xor_op() {
-	return "vxorpd";
-}
-
-const char* fma_post() {
-	return "pd";
-}
-
-const char* simd_reg() {
-	return "%ymm";
-}
-
-
-
-#endif
-
-
-#ifdef SIMD2
-
-int simd_width() {
-	return 16;
+	return 8 * width;
 }
 
 const char* mova_op() {
-	return "vmovapd";
+	return width == 1 ? "vmovq" : "vmovapd";
 }
 
 const char* movu_op() {
-	return "vmovupd";
+	return width == 1 ? "vmovq" : "vmovupd";
 }
 
 const char* add_op() {
-	return "vaddpd";
+	return width == 1 ? "vaddsd" : "vaddpd";
 }
 
 const char* sub_op() {
-	return "vsubpd";
+	return width == 1 ? "vsubsd" : "vsubpd";
 }
 
 const char* mul_op() {
-	return "vmulpd";
+	return width == 1 ? "vmulsd" : "vmulpd";
 }
 
 const char* xor_op() {
-	return "vxorpd";
+	return width == 1 ? "vpxor" : "vxorpd";
 }
 
 const char* fma_post() {
-	return "pd";
+	return width == 1 ? "sd" : "pd";
 }
-
 
 const char* simd_reg() {
-	return "%xmm";
+	return width == 4 ? "%ymm" : "%xmm";
 }
 
-#endif
-
-#ifdef SCALAR
-
-int simd_width() {
-	return 8;
-}
-
-const char* mova_op() {
-	return "vmovq";
-}
-
-const char* movu_op() {
-	return "vmovq";
-}
-
-const char* add_op() {
-	return "vaddsd";
-}
-
-const char* sub_op() {
-	return "vsubsd";
-}
-
-const char* mul_op() {
-	return "vmulsd";
-}
-
-const char* xor_op() {
-	return "vpxor";
-}
-
-const char* fma_post() {
-	return "pd";
-}
-
-
-const char* simd_reg() {
-	return "%xmm";
-}
-
-
-#endif
 std::string simd_reg(int i) {
 	return std::string(simd_reg()) + std::to_string(i);
 }

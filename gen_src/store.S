@@ -4,41 +4,43 @@
 #define       stride         %rcx
 #define       N              %r8
 
-              .global        store_complex_simd4
-              .global        store_complex_simd2
-              .global        store_complex_scalar
+              .global        sfft_store_complex_w4
+              .global        sfft_store_complex_w2
+              .global        sfft_store_complex_w1
 
-store_complex_simd4:
+              .text
+
+sfft_store_complex_w4:
               xor            %rax, %rax
 loop1:        mov            stride, %r10
               mov            %rax, %r9
               imul           %rax, %r10
-              shl            %r9
+              shl            $3, %r9
               vmovupd        (Z, %r9, 8), %ymm0
               vmovupd        32(Z, %r9, 8), %ymm1
-              vmovapd        %ymm0, (X, %r10, 8)
-              vmovapd        %ymm1, (Y, %r10, 8)
+              vmovupd        %ymm0, (X, %r10, 8)
+              vmovupd        %ymm1, (Y, %r10, 8)
               inc            %rax
               cmp            %rax, N
               jne            loop1
               ret
 
-store_complex_simd2:
+sfft_store_complex_w2:
               xor            %rax, %rax
 loop2:        mov            stride, %r10
               mov            %rax, %r9
               imul           %rax, %r10
-              shl            %r9
+              shl            $2, %r9
               vmovupd        (Z, %r9, 8), %xmm0
               vmovupd        16(Z, %r9, 8), %xmm1
-              vmovapd        %xmm0, (X, %r10, 8)
-              vmovapd        %xmm1, (Y, %r10, 8)
+              vmovupd        %xmm0, (X, %r10, 8)
+              vmovupd        %xmm1, (Y, %r10, 8)
               inc            %rax
               cmp            %rax, N
               jne            loop2
               ret
 
-store_complex_scalar:
+sfft_store_complex_w1:
               xor            %rax, %rax
 loop3:        mov            stride, %r10
               mov            %rax, %r9

@@ -13,8 +13,8 @@
 #include "types.hpp"
 
 /*void fft_complex_simd4(fft_simd4* X, int N) {
-	sfft_complex((double*) X, ((double*) X) + sizeof(fft_simd4), 2 * sizeof(fft_simd4), 2 * sizeof(fft_simd4), N);
-}*/
+ sfft_complex((double*) X, ((double*) X) + sizeof(fft_simd4), 2 * sizeof(fft_simd4), 2 * sizeof(fft_simd4), N);
+ }*/
 
 void * operator new(std::size_t n) {
 	void* memptr;
@@ -127,7 +127,6 @@ int cooley_tukey_radix(int N) {
 		return N1;
 	}
 }
-
 
 /*void cooley_tukey_s(complex<double>* X, complex<double>* Y, int N) {
  if (N <= FFT_NMAX) {
@@ -253,20 +252,24 @@ int cooley_tukey_radix(int N) {
  */
 timer tm1, tm2, tm3, tm4;
 
-void FFT(std::vector<complex<double>>& Z) {
-	int N = Z.size();
+void FFT(std::vector<complex<double>>& ZZ) {
+	int N = ZZ.size();
 	std::vector<double> Y(SIMD_SIZE * N);
 	std::vector<double> X(SIMD_SIZE * N);
 	for (int i = 0; i < SIMD_SIZE * N; i++) {
-		X[i] = Z[i / SIMD_SIZE].real();
-		Y[i] = Z[i / SIMD_SIZE].imag();
+		X[i] = ZZ[i / SIMD_SIZE].real();
+		Y[i] = ZZ[i / SIMD_SIZE].imag();
 	}
+	static std::vector<double> Z;
+	Z.resize(4 * N);
 	tm2.start();
-	sfft_complex(X.data(), Y.data(), SIMD_SIZE, N);
+	sfft_load_complex_w1(X.data(), Y.data(), Z.data(), 1, N);
+	sfft_complex_w1(Z.data(), Z.data() + 2 * N, N);
+	sfft_store_complex_w1(X.data(), Y.data(), Z.data() + 2 * N, 1, N);
 	tm2.stop();
 	for (int i = 0; i < SIMD_SIZE * N; i++) {
-		Z[i / SIMD_SIZE].real() = X[i];
-		Z[i / SIMD_SIZE].imag() = Y[i];
+		ZZ[i / SIMD_SIZE].real() = X[i];
+		ZZ[i / SIMD_SIZE].imag() = Y[i];
 	}
 }
 
@@ -308,9 +311,9 @@ int main(int argc, char **argv) {
 				double y = X[n].imag() - Y[n].imag();
 				double err = sqrt(x * x + y * y);
 				avg_err += err;
-		  // printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
+				// printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
 			}
-		//	abort();
+			//	abort();
 		}
 		avg_err /= (255 * N);
 		auto pfac = prime_factorization(N);
