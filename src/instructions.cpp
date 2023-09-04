@@ -14,7 +14,7 @@ int simd_width() {
 }
 
 const char* mova_op() {
-	return width == 1 ? "vmovq" : "vmovupd";
+	return width == 1 ? "vmovq" : "vmovapd";
 }
 
 const char* movu_op() {

@@ -389,21 +389,21 @@ std::vector<std::string> get_mem_locs(std::string& pro, std::string& code, std::
 		epi += ptr;
 		free(ptr);
 	}
-	asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 8, "%rdx", "%r8");
+	asprintf(&ptr, "%-15s%-15s%s, %s\n", "", "shl", "$3", "%rdx");
 	code += ptr;
 	free(ptr);
 	if (N >= 3) {
-		asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 24, "%rdx", "%r9");
+		asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 3, "%rdx", "%r9");
 		code += ptr;
 		free(ptr);
 	}
 	if (N >= 5) {
-		asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 40, "%rdx", "%rax");
+		asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 5, "%rdx", "%rax");
 		code += ptr;
 		free(ptr);
 	}
 	if (N >= 7) {
-		asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 56, "%rdx", "%rbx");
+		asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 7, "%rdx", "%rbx");
 		code += ptr;
 		free(ptr);
 	}
@@ -413,7 +413,7 @@ std::vector<std::string> get_mem_locs(std::string& pro, std::string& code, std::
 		locs.push_back("(" + r + ")");
 		locs.push_back("(" + i + ")");
 		if (n1 >= 1) {
-			asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 64 * n1, "%rdx", r.c_str());
+			asprintf(&ptr, "%-15s%-15s$%i, %s, %s\n", "", "imul", 8 * n1, "%rdx", r.c_str());
 			code += ptr;
 			free(ptr);
 			asprintf(&ptr, "%-15s%-15s%s, %s\n", "", "mov", r.c_str(), i.c_str());
@@ -427,20 +427,20 @@ std::vector<std::string> get_mem_locs(std::string& pro, std::string& code, std::
 			free(ptr);
 		}
 		if (8 * n1 + 1 < N) {
-			locs.push_back("(" + r + ", %r8)");
-			locs.push_back("(" + i + ", %r8)");
+			locs.push_back("(" + r + ", %rdx)");
+			locs.push_back("(" + i + ", %rdx)");
 		}
 		if (8 * n1 + 2 < N) {
-			locs.push_back("(" + r + ", %r8, 2)");
-			locs.push_back("(" + i + ", %r8, 2)");
+			locs.push_back("(" + r + ", %rdx, 2)");
+			locs.push_back("(" + i + ", %rdx, 2)");
 		}
 		if (8 * n1 + 3 < N) {
 			locs.push_back("(" + r + ", %r9)");
 			locs.push_back("(" + i + ", %r9)");
 		}
 		if (8 * n1 + 4 < N) {
-			locs.push_back("(" + r + ", %r8, 4)");
-			locs.push_back("(" + i + ", %r8, 4)");
+			locs.push_back("(" + r + ", %rdx, 4)");
+			locs.push_back("(" + i + ", %rdx, 4)");
 		}
 		if (8 * n1 + 5 < N) {
 			locs.push_back("(" + r + ", %rax)");
@@ -464,11 +464,14 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 	std::pair<std::string, int> rc;
 	auto db = outputs[0].v.properties().names;
 	auto memlocs = get_mem_locs(pro, code, epi, cmplx ? (outputs.size() / 2) : outputs.size());
-	printf("%s", pro.c_str());
-	printf("%s", code.c_str());
-	printf("%s", epi.c_str());
+	if (deci == NONE) {
+//		char* ptr;
+//		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rdx", "%rcx");
+//		pro = std::string(ptr) + pro;
+//		free(ptr);
+	}
 	for (int i = 0; i < memlocs.size(); i++) {
-	//	printf("%s\n", memlocs[i].c_str());
+		//	printf("%s\n", memlocs[i].c_str());
 	}
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n] = outputs[n].optimize_fma();
@@ -496,14 +499,47 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			props.num = n / 2;
 			props.iscmplximag = (n % 2 == 1);
 			props.iscmplxreal = (n % 2 == 0);
-			props.name = db->reserve_name(memlocs[n]);
 		} else {
 			props.num = n;
 			props.isreal = true;
-			props.name = db->reserve_name(memlocs[n]);
 		}
+		props.name = db->generate_name();
+		char* ptr;
+		auto areg = db->get_register(*props.name, code, true);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), memlocs[n].c_str(), areg.c_str());
+		code += ptr;
+		free(ptr);
 
 		assert(props.op == IN);
+	}
+	if (deci == DIT) {
+		char* ptr;
+		for (int n = 2; n < inputs.size(); n += 2) {
+			auto rnm = *inputs[n + 0].v.properties().name;
+			auto inm = *inputs[n + 1].v.properties().name;
+			auto rreg = db->get_register(rnm, code, false);
+			auto ireg = db->get_register(inm, code, false);
+			auto r = (std::to_string(simd_width() * n + 0) + "(%r8)");
+			auto i = (std::to_string(simd_width() * (n + 1)) + "(%r8)");
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", mul_op(), i.c_str(), ireg.c_str(), simd_reg(14).c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", mul_op(), r.c_str(), ireg.c_str(), simd_reg(15).c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", (std::string("vfmsub231") + fma_post()).c_str(), r.c_str(), rreg.c_str(), simd_reg(14).c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", (std::string("vfmadd231") + fma_post()).c_str(), i.c_str(), rreg.c_str(), simd_reg(15).c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rreg.c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), ireg.c_str());
+			code += ptr;
+			free(ptr);
+		}
 	}
 
 	dag_vertex<properties>::executor exe;
@@ -598,6 +634,9 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			if (ready) {
 				candidates.push_back(V);
 			}
+			if( candidates.size() > 8 ) {
+				break;
+			}
 		}
 		int best_score = std::numeric_limits<int>::min();
 		math_vertex best;
@@ -609,7 +648,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 				for (int i = 0; i < V.v.get_edge_in_count(); i++) {
 					if (V.v.get_edge_in(i).properties().name) {
 						if (db->current_name(*V.v.get_edge_in(i).properties().name)[0] == '%') {
-							score++;
+							score += 2;
 						}
 					}
 					if (V.v.get_edge_in(i).use_count() == 2) {
@@ -631,65 +670,113 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		V.v.free_edges();
 		list.erase(V);
 	}
-	code += db->free_regs();
-
-	bool hit;
-	while (1) {
-		hit = false;
-		int i;
-		std::string nm1, nm2;
-		for (i = 0; i < outputs.size(); i++) {
-			nm1 = memlocs[i];
-			nm2 = *outputs[i].v.properties().name;
-			if (nm1 != nm2) {
-				hit = true;
-				break;
-			}
-		}
-		if (!hit) {
-			break;
-		}
+	if (deci == DIF) {
 		char* ptr;
-		hit = false;
-		for (int j = 0; j < outputs.size(); j++) {
-			if (i == j) {
-				continue;
-			} else if (nm1 == *outputs[j].v.properties().name) {
-				//	printf( "SWAP %s %s\n", nm1.c_str(), nm2.c_str());
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm2.c_str(), simd_reg(14).c_str());
-				code += ptr;
-				free(ptr);
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm1.c_str(), simd_reg(15).c_str());
-				code += ptr;
-				free(ptr);
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), nm2.c_str());
-				code += ptr;
-				free(ptr);
-				asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), nm1.c_str());
-				code += ptr;
-				free(ptr);
-				std::swap(outputs[i], outputs[j]);
-				hit = true;
-				break;
-			}
-		}
-		if (!hit) {
-			//asprintf(&ptr "ASN  %s\n", nm1.c_str());
-			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm2.c_str(), simd_reg(14).c_str());
+		for (int n = 2; n < outputs.size(); n += 2) {
+			auto rnm = *outputs[n + 0].v.properties().name;
+			auto inm = *outputs[n + 1].v.properties().name;
+			auto rreg = db->get_register(rnm, code, false);
+			auto ireg = db->get_register(inm, code, false);
+			auto r = (std::to_string(simd_width() * n + 0) + "(%r8)");
+			auto i = (std::to_string(simd_width() * (n + 1)) + "(%r8)");
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", mul_op(), i.c_str(), ireg.c_str(), simd_reg(14).c_str());
 			code += ptr;
 			free(ptr);
-			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), nm1.c_str());
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", mul_op(), r.c_str(), ireg.c_str(), simd_reg(15).c_str());
 			code += ptr;
 			free(ptr);
-			outputs[i].v.properties().name = std::make_shared<std::string>(memlocs[i]);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", (std::string("vfmsub231") + fma_post()).c_str(), r.c_str(), rreg.c_str(), simd_reg(14).c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", (std::string("vfmadd231") + fma_post()).c_str(), i.c_str(), rreg.c_str(), simd_reg(15).c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), rreg.c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), ireg.c_str());
+			code += ptr;
+			free(ptr);
 		}
 	}
+	for (int n = 0; n < outputs.size(); n++) {
+		char* ptr;
+		auto& props = outputs[n].v.properties();
+		auto name = db->current_name(*props.name);
+		if (name[0] == '%') {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), name.c_str(), memlocs[n].c_str());
+			code += ptr;
+			free(ptr);
+		} else {
+			static int regnum = 14;
+			regnum = regnum == 15 ? 14 : 15;
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), name.c_str(), simd_reg(regnum).c_str());
+			code += ptr;
+			free(ptr);
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), simd_reg(regnum).c_str(), memlocs[n].c_str());
+			code += ptr;
+			free(ptr);
+		}
+	}
+//	code += db->free_regs();
+
+	/*bool hit;
+	 while (1) {
+	 hit = false;
+	 int i;
+	 std::string nm1, nm2;
+	 for (i = 0; i < outputs.size(); i++) {
+	 nm1 = memlocs[i];
+	 nm2 = *outputs[i].v.properties().name;
+	 if (nm1 != nm2) {
+	 hit = true;
+	 break;
+	 }
+	 }
+	 if (!hit) {
+	 break;
+	 }
+	 char* ptr;
+	 hit = false;
+	 for (int j = 0; j < outputs.size(); j++) {
+	 if (i == j) {
+	 continue;
+	 } else if (nm1 == *outputs[j].v.properties().name) {
+	 //	printf( "SWAP %s %s\n", nm1.c_str(), nm2.c_str());
+	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm2.c_str(), simd_reg(14).c_str());
+	 code += ptr;
+	 free(ptr);
+	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm1.c_str(), simd_reg(15).c_str());
+	 code += ptr;
+	 free(ptr);
+	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), nm2.c_str());
+	 code += ptr;
+	 free(ptr);
+	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), nm1.c_str());
+	 code += ptr;
+	 free(ptr);
+	 std::swap(outputs[i], outputs[j]);
+	 hit = true;
+	 break;
+	 }
+	 }
+	 if (!hit) {
+	 //asprintf(&ptr "ASN  %s\n", nm1.c_str());
+	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm2.c_str(), simd_reg(14).c_str());
+	 code += ptr;
+	 free(ptr);
+	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), nm1.c_str());
+	 code += ptr;
+	 free(ptr);
+	 outputs[i].v.properties().name = std::make_shared<std::string>(memlocs[i]);
+	 }
+	 }*/
 
 	auto decls = db->get_declarations();
 
 	std::string defines;
 	std::set<std::string> found;
-	int memnum = 0;
+	int memnum = 1;
 	for (int i = 0; i < code.size() - 6; i++) {
 		char token[7];
 		for (int j = 0; j < 6; j++) {
@@ -717,6 +804,9 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		entry += ptr;
 		free(ptr);
 		asprintf(&ptr, "%15s%-15s$%i, %s\n", "", "sub", stacksz, "%rsp");
+		entry += ptr;
+		free(ptr);
+		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "and", "$0xfffffffffffffc00", "%rsp");
 		entry += ptr;
 		free(ptr);
 		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rbp", "%rsp");

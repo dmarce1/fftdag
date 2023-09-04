@@ -255,7 +255,7 @@ timer tm1, tm2, tm3, tm4;
 void FFT(std::vector<complex<double>>& ZZ) {
 	int N = ZZ.size();
 	tm2.start();
-	sfft_complex_w1((double*) ZZ.data(), ((double*) ZZ.data()) + 1, 2, N, N);
+	sfft_complex_w1((double*) ZZ.data(), ((double*) ZZ.data()) + 1, 2, N);
 	tm2.stop();
 }
 
@@ -265,9 +265,9 @@ double rand1() {
 
 int main(int argc, char **argv) {
 	for (int N = 2; N <= FFT_NMAX; N++) {
-		while (!can_cooley_tukey(N)) {
-			N++;
-		}
+//		while (!can_cooley_tukey(N)) {
+//.			N++;
+//		}
 		double avg_err = 0.0;
 		for (int i = 0; i < 100; i++) {
 			std::vector<complex<double>> X(N);

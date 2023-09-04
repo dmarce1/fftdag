@@ -33,8 +33,19 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 	//assert(mem.size());
 	assert(mem[0] != 'C');
 	assert(mem[0] != '%');
+	printf( "%i\n", reg_q->size());
 	if (mem2reg->find(mem) != mem2reg->end()) {
-		return (*mem2reg)[mem];
+		printf( "a\n");
+		auto reg = (*mem2reg)[mem];
+		if( reg_q->size()) {
+			if( reg_q->front() == reg ) {
+				reg_q->pop();
+				assert(reg_q->size());
+				reg_q->push(reg);
+			}
+		}
+		printf( "%s\n", reg.c_str());
+		return reg;
 	} else {
 		char* ptr;
 		std::string reg;
@@ -52,6 +63,7 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 			}
 			*reg_q = std::move(newq);
 			reg_q->push(reg);
+			printf( "b\n");
 		} else {
 			if (!reg_q->size()) {
 				assert(false);
@@ -69,12 +81,14 @@ std::string name_server::get_register(std::string mem, std::string& code, bool n
 			(*mem2reg)[mem] = reg;
 			(*reg2mem)[reg] = mem;
 			reg_q->push(reg);
+			printf( "c\n");
 		}
 		if (!noload) {
 			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), mem.c_str(), reg.c_str());
 			code += ptr;
 			free(ptr);
 		}
+		printf( "%s\n", reg.c_str());
 		return reg;
 	}
 }
