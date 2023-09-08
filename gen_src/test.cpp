@@ -259,15 +259,73 @@ void FFT(std::vector<complex<double>>& ZZ) {
 	tm2.stop();
 }
 
+void FFT_real(std::vector<double>& ZZ) {
+	int N = ZZ.size();
+	tm2.start();
+	sfft_real_w1((double*) ZZ.data(), 1, N);
+	tm2.stop();
+}
+
 double rand1() {
 	return (rand() + 0.5) / (RAND_MAX + 1.0);
 }
 
+int main_real(int argc, char **argv) {
+	for (int N = 2; N <= FFT_NMAX; N++) {
+		double avg_err = 0.0;
+		for (int i = 0; i < 1000; i++) {
+			std::vector<double> X(N);
+			std::vector<std::complex<double>> Y(N);
+			for (int n = 0; n < N; n++) {
+				Y[n].real(X[n] = rand1());
+				Y[n].imag(0);
+			}
+//			Y[0].real(X[0].real() = 1);
+			if (i != 0) {
+				tm1.start();
+				tm3.start();
+			}
+			fftw(Y);
+			if (i != 0) {
+				tm1.stop();
+				tm3.stop();
+				tm4.start();
+			}
+			FFT_real(X);
+			if (i != 0) {
+				tm4.stop();
+			}
+			for (int n = 0; n < N / 2 + 1; n++) {
+				std::complex<double> Z;
+				Z.real(X[n]);
+				if (n == 0 || (N % 2 == 0 && n == N / 2)) {
+					Z.imag(0);
+				} else {
+					Z.imag(X[N - n]);
+				}
+				double x = Z.real() - Y[n].real();
+				double y = Z.imag() - Y[n].imag();
+				double err = sqrt(x * x + y * y);
+				avg_err += err;
+				//printf("%e %e | %e %e | %e\n", Z.real(), Z.imag(), Y[n].real(), Y[n].imag(), err);
+			}
+		}
+		avg_err /= (255 * N);
+		auto pfac = prime_factorization(N);
+		std::string f;
+		for (auto i = pfac.begin(); i != pfac.end(); i++) {
+			f += "(" + std::to_string(i->first) + "^" + std::to_string(i->second) + ")";
+		}
+		printf("%i: %32s | %e %e %e %e %e\n", N, f.c_str(), avg_err, tm1.read(), tm2.read(), tm2.read() / tm1.read(), tm4.read() / tm3.read());
+	//	abort();
+		tm2.reset();
+		tm1.reset();
+	}
+	return 0;
+}
+
 int main(int argc, char **argv) {
 	for (int N = 2; N <= FFT_NMAX; N++) {
-//		while (!can_cooley_tukey(N)) {
-//.			N++;
-//		}
 		double avg_err = 0.0;
 		for (int i = 0; i < 100; i++) {
 			std::vector<complex<double>> X(N);
@@ -298,9 +356,9 @@ int main(int argc, char **argv) {
 				double y = X[n].imag() - Y[n].imag();
 				double err = sqrt(x * x + y * y);
 				avg_err += err;
-		//		printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
+				//		printf("%e %e | %e %e | %e\n", X[n].real(), X[n].imag(), Y[n].real(), Y[n].imag(), err);
 			}
-	//		abort();
+			//		abort();
 		}
 		avg_err /= (255 * N);
 		auto pfac = prime_factorization(N);

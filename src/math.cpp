@@ -491,7 +491,12 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		//	props.name = db->reserve_name(memlocs[n] + "out");
 
 	}
-	assert(memlocs.size() == inputs.size());
+	if (!cmplx) {
+		for (int n = 0; n < outputs.size(); n++) {
+			memlocs[n] = memlocs[2 * n];
+		}
+	}
+	memlocs.resize(outputs.size());
 	for (int n = 0; n < inputs.size(); n++) {
 		auto& props = inputs[n].v.properties();
 		props.iscmplxreal = props.iscmplximag = props.isreal = false;
@@ -634,7 +639,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			if (ready) {
 				candidates.push_back(V);
 			}
-			if( candidates.size() > 8 ) {
+			if (candidates.size() > 8) {
 				break;
 			}
 		}
