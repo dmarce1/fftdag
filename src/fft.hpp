@@ -2,17 +2,20 @@
 
 #include "math.hpp"
 
-#define FFT_REAL 1
-#define FFT_INV 2
-#define FFT_DCT1 4
-#define FFT_DCT2 8
-#define FFT_DCT3 16
-#define FFT_DCT4 32
-#define FFT_DST1 64
-#define FFT_DST2 128
-#define FFT_DST3 256
-#define FFT_DST4 512
-#define FFT_ODD 1024
+#define FFT_REAL (1 << 0)
+#define FFT_INV  (1 << 1)
+#define FFT_DCT1 (1 << 2)
+#define FFT_DCT2 (1 << 3)
+#define FFT_DCT3 (1 << 4)
+#define FFT_DCT4 (1 << 5)
+#define FFT_DST1 (1 << 6)
+#define FFT_DST2 (1 << 7)
+#define FFT_DST3 (1 << 8)
+#define FFT_DST4 (1 << 9)
+#define FFT_ODD  (1 << 10)
+#define FFT_DIT  (1 << 11)
+#define FFT_DIF  (1 << 12)
+#define FFT_SKEW (1 << 13)
 
 std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts);
 std::vector<cmplx> fft_modsplit(std::vector<cmplx> xin, int N, int opts);

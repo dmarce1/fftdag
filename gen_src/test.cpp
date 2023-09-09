@@ -266,8 +266,76 @@ void FFT_real(std::vector<double>& ZZ) {
 	tm2.stop();
 }
 
+void FFT_skew(std::vector<double>& ZZ) {
+	int N = ZZ.size();
+	tm2.start();
+	sfft_skew_w1((double*) ZZ.data(), 1, N);
+	tm2.stop();
+}
+
 double rand1() {
 	return (rand() + 0.5) / (RAND_MAX + 1.0);
+}
+
+void dft_skew(double* X, int N) {
+	std::vector<std::complex<double>> Y(N);
+	for (int k = 0; k < N; k++) {
+		Y[k] = 0.0;
+		for (int n = 0; n < N; n++) {
+			const auto w = std::polar(1.0, -2.0 * M_PI * n * (k + 0.5) / N);
+			Y[k] += X[n] * w;
+		}
+	}
+	for (int k = 0; k < N - k; k++) {
+		X[k] = Y[k].real();
+		if (N - k - 1 != k) {
+			X[N - k - 1] = Y[k].imag();
+		}
+	}
+}
+
+int main(int argc, char **argv) {
+	for (int N = 2; N <= FFT_NMAX; N++) {
+		double avg_err = 0.0;
+		for (int i = 0; i < 1000; i++) {
+			std::vector<double> X(N);
+			std::vector<double> Y(N);
+			for (int n = 0; n < N; n++) {
+				Y[n] = (X[n] = rand1());
+			}
+//			Y[0].real(X[0].real() = 1);
+			if (i != 0) {
+				tm1.start();
+				tm3.start();
+			}
+			dft_skew(Y.data(), N);
+			if (i != 0) {
+				tm1.stop();
+				tm3.stop();
+				tm4.start();
+			}
+			FFT_skew(X);
+			if (i != 0) {
+				tm4.stop();
+			}
+			for (int n = 0; n < N / 2 + 1; n++) {
+				double x = X[n] - Y[n];
+				avg_err += sqrt(x * x);
+		//		printf("%e | %e | %e\n", X[n], Y[n], X[n] - Y[n]);
+			}
+		}
+		avg_err /= (255 * N);
+		auto pfac = prime_factorization(N);
+		std::string f;
+		for (auto i = pfac.begin(); i != pfac.end(); i++) {
+			f += "(" + std::to_string(i->first) + "^" + std::to_string(i->second) + ")";
+		}
+		printf("%i: %32s | %e %e %e %e %e\n", N, f.c_str(), avg_err, tm1.read(), tm2.read(), tm2.read() / tm1.read(), tm4.read() / tm3.read());
+		//	abort();
+		tm2.reset();
+		tm1.reset();
+	}
+	return 0;
 }
 
 int main_real(int argc, char **argv) {
@@ -317,14 +385,14 @@ int main_real(int argc, char **argv) {
 			f += "(" + std::to_string(i->first) + "^" + std::to_string(i->second) + ")";
 		}
 		printf("%i: %32s | %e %e %e %e %e\n", N, f.c_str(), avg_err, tm1.read(), tm2.read(), tm2.read() / tm1.read(), tm4.read() / tm3.read());
-	//	abort();
+		//	abort();
 		tm2.reset();
 		tm1.reset();
 	}
 	return 0;
 }
 
-int main(int argc, char **argv) {
+int main_cmplx(int argc, char **argv) {
 	for (int N = 2; N <= FFT_NMAX; N++) {
 		double avg_err = 0.0;
 		for (int i = 0; i < 100; i++) {

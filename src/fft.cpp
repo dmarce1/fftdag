@@ -55,7 +55,12 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 			}
 		}
 	} else {
-		if (opts & FFT_REAL) {
+		if (opts & FFT_SKEW) {
+			for (int n = 0; n < N / 2; n++) {
+				x[n].x = math_vertex(0.5) * xin[n];
+				x[n + N / 2].x = math_vertex(-0.5) * xin[n];
+			}
+		} else if (opts & FFT_REAL) {
 			for (int n = 0; n < N; n++) {
 				x[n].x = xin[n];
 			}
@@ -118,7 +123,16 @@ std::vector<math_vertex> fft(std::vector<math_vertex> xin, int N, int opts) {
 			}
 		}
 	} else {
-		if (opts & FFT_REAL) {
+		if (opts & FFT_SKEW) {
+			xout.resize(N / 2);
+			for (int n = 0; n < N / 2 - n - 1; n++) {
+				xout[n] = x[2 * n + 1].x;
+				xout[N / 2 - n - 1] = x[2 * n + 1].y;
+			}
+			if ((N / 2) % 2 == 1) {
+				xout[N / 4] = x[N / 2].x;
+			}
+		} else if (opts & FFT_REAL) {
 			xout.resize(N);
 			xout[0] = x[0].x;
 			if (N % 2 == 0) {
@@ -344,7 +358,7 @@ void print_fft_bests() {
 std::vector<cmplx> fft(std::vector<cmplx> xin, int N, int opts, bool root) {
 	for (auto x : xin) {
 		x.x.set_goal();
-	x.y.set_goal();
+		x.y.set_goal();
 	}
 	if (N == 1) {
 		return xin;

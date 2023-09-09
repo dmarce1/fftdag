@@ -73,6 +73,22 @@ int main(int argc, char **argv) {
 		int cnt1 = 0;
 		int cnt2 = 0;
 		fft_reset_cache();
+		fprintf(stderr, "------------------------------SKEW-------------------------\n");
+		for (int N = Nmin; N <= Nmax; N++) {
+			auto inputs = math_vertex::new_inputs(N);
+			auto outputs = fft(inputs, 2 * N, FFT_SKEW);
+			auto cnt = math_vertex::operation_count(outputs);
+			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, 4, NONE);
+			fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_SKEW).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+			std::string code = apply_header(tmp.first, std::string("sfft_skew_w") + std::to_string(width) + "_" + std::to_string(N));
+			std::string fname = "fft.skew.w" + std::to_string(width) + "." + std::to_string(N) + ".S";
+			FILE* fp = fopen(fname.c_str(), "wt");
+			fprintf(fp, "%s\n", code.c_str());
+			fclose(fp);
+			cnt1 += tmp.second;
+			cnt2 += cnt.total();
+		}
+		fft_reset_cache();
 		fprintf(stderr, "------------------------------REAL-------------------------\n");
 		for (int N = Nmin; N <= Nmax; N++) {
 			auto inputs = math_vertex::new_inputs(N);
@@ -121,7 +137,6 @@ int main(int argc, char **argv) {
 			cnt2 += cnt.total();
 		}
 
-
 		fprintf(stderr, "------------------------------COMPLEX-DIF_---------------------\n");
 		for (int N = Nmin; N <= Nmax; N++) {
 			auto inputs = math_vertex::new_inputs(2 * N);
@@ -159,16 +174,17 @@ int main(int argc, char **argv) {
 		fprintf(fp, "void sfft_perf_shuf_w%i(double* x, double* y);", width);
 		fprintf(fp, "void sfft_inv_perf_shuf_w%i(double* x, double* y);", width);
 
-	/*	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-			fprintf(fp, "void sfft_complex_w%i_%i(double*, double*, int, int);\n", width, n);
-			fprintf(fp, "void sfft_complex_dit_w%i_%i(double*, double*, double*, int, int);\n", width, n);
-			fprintf(fp, "void sfft_complex_dif_w%i_%i(double*, double*, double*, int, int);\n", width, n);
-		}*
-		for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
-			//	fprintf(fp, "void sfft_real_w%i_%i(double*, double*);\n", width, n);
-		}
-		/*                                         rdi        rsi        rdx    rcx    r8     r9 */
+		/*	for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+		 fprintf(fp, "void sfft_complex_w%i_%i(double*, double*, int, int);\n", width, n);
+		 fprintf(fp, "void sfft_complex_dit_w%i_%i(double*, double*, double*, int, int);\n", width, n);
+		 fprintf(fp, "void sfft_complex_dif_w%i_%i(double*, double*, double*, int, int);\n", width, n);
+		 }*
+		 for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+		 //	fprintf(fp, "void sfft_real_w%i_%i(double*, double*);\n", width, n);
+		 }
+		 /*                                         rdi        rsi        rdx    rcx    r8     r9 */
 		fprintf(fp, "void sfft_real_w%i(double* x, int s, int N);\n", width);
+		fprintf(fp, "void sfft_skew_w%i(double* x, int s, int N);\n", width);
 		fprintf(fp, "void sfft_complex_w%i(double* x, double* y, int s, int N);\n", width);
 		fprintf(fp, "void sfft_complex_dit_w%i(double* x, double* y, int s, int N, double* w);\n", width);
 		fprintf(fp, "void sfft_complex_dif_w%i(double* x, double* y, int s, int N, double* w);\n", width);
@@ -176,18 +192,85 @@ int main(int argc, char **argv) {
 	fprintf(fp, "}\n");
 	fclose(fp);
 
-	//fprintf(stderr, "O: %i D: %i\n", cnt2, cnt1);
+	fft_reset_cache();
 	system("cp ../../gen_src/main.cpp .\n");
 	system("cp ../../gen_src/test.cpp .\n");
 	system("cp ../../gen_src/load.S .\n");
 	system("cp ../../gen_src/store.S .\n");
 	system("cp ../../gen_src/sfft_complex.S .\n");
 	system("cp ../../gen_src/sfft_real.S .\n");
+	system("cp ../../gen_src/sfft_skew.S .\n");
 	system("cp ../../gen_src/twiddle.S .\n");
 	system("cp ../../gen_src/shuffle.S .\n");
 	system("cp ../../gen_src/util.cpp .\n");
 	system("cp ../../gen_src/util.hpp .\n");
 	system("cp ../../gen_src/types.hpp .\n");
+
+	/* fprintf(fp, "\n");
+	 fprintf(fp, "inline void sfft_complex(double* xr, double* xi, size_t sr, size_t si, size_t N) {\n");
+	 fprintf(fp, "\tswitch(N) {\n");
+	 for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+	 fprintf(fp, "\tcase %i:\n", n);
+	 fprintf(fp, "\t\tsfft_complex_%i(xr, xi, sr, si);\n", n);
+	 fprintf(fp, "\t\tbreak;\n");
+	 }
+	 fprintf(fp, "\tdefault:\n");
+	 fprintf(fp, "\t\tassert(false);\n");
+	 fprintf(fp, "\t}\n");
+	 fprintf(fp, "}\n");
+	 fprintf(fp, "\n");
+	 fprintf(fp, "\n");
+	 fprintf(fp, "inline void sfft_complex_dit(double* xr, double* xi, double* wr, double* wi, size_t sr, size_t si, size_t N) {\n");
+	 fprintf(fp, "\tswitch(N) {\n");
+	 for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+	 fprintf(fp, "\tcase %i:\n", n);
+	 fprintf(fp, "\t\tsfft_complex_dit_%i(xr, xi, wr, wi, sr, si);\n", n);
+	 fprintf(fp, "\t\tbreak;\n");
+	 }
+	 fprintf(fp, "\tdefault:\n");
+	 fprintf(fp, "\t\tassert(false);\n");
+	 fprintf(fp, "\t}\n");
+	 fprintf(fp, "}\n");
+	 fprintf(fp, "\n");
+	 fprintf(fp, "\n");
+	 fprintf(fp, "inline void sfft_complex_dif(double* xr, double* xi, double* wr, double* wi, size_t sr, size_t si, size_t N) {\n");
+	 fprintf(fp, "\tswitch(N) {\n");
+	 for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+	 fprintf(fp, "\tcase %i:\n", n);
+	 fprintf(fp, "\t\tsfft_complex_dif_%i(xr, xi, wr, wi, sr, si);\n", n);
+	 fprintf(fp, "\t\tbreak;\n");
+	 }
+	 fprintf(fp, "\tdefault:\n");
+	 fprintf(fp, "\t\tassert(false);\n");
+	 fprintf(fp, "\t}\n");
+	 fprintf(fp, "}\n");
+	 fprintf(fp, "\n");
+	 fprintf(fp, "\n");
+	 fprintf(fp, "inline void sfft_real(double* x, size_t s, size_t N) {\n");
+	 fprintf(fp, "\tswitch(N) {\n");
+	 for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+	 fprintf(fp, "\tcase %i:\n", n);
+	 fprintf(fp, "\t\tsfft_real_%i(x, s);\n", n);
+	 fprintf(fp, "\t\tbreak;\n");
+	 }
+	 fprintf(fp, "\tdefault:\n");
+	 fprintf(fp, "\t\tassert(false);\n");
+	 fprintf(fp, "\t}\n");
+	 fprintf(fp, "}\n");
+	 fprintf(fp, "\n");
+	 fprintf(fp, "inline void sfft_dct2(double* x, size_t s, size_t N) {\n");
+	 fprintf(fp, "\tswitch(N) {\n");
+	 for (int n = FFT_NMIN; n <= FFT_NMAX; n++) {
+	 fprintf(fp, "\tcase %i:\n", n);
+	 fprintf(fp, "\t\tsfft_dct2_%i(x, s);\n", n);
+	 fprintf(fp, "\t\tbreak;\n");
+	 }
+	 fprintf(fp, "\tdefault:\n");
+	 fprintf(fp, "\t\tassert(false);\n");
+	 fprintf(fp, "\t}\n");
+	 fprintf(fp, "}\n");
+	 fprintf(fp, "\n");
+	 fclose(fp);*/
 
 	fp = fopen("Makefile", "wt");
 	fprintf(fp, "CC=g++\n");
@@ -196,6 +279,9 @@ int main(int argc, char **argv) {
 	fprintf(fp, "DEPS = sfft.hpp\n");
 	fprintf(fp, "OBJ = ");
 	for (int n = Nmin; n <= Nmax; n++) {
+		fprintf(fp, "fft.skew.w1.%i.o ", n);
+		fprintf(fp, "fft.skew.w2.%i.o ", n);
+		fprintf(fp, "fft.skew.w4.%i.o ", n);
 		fprintf(fp, "fft.real.w1.%i.o ", n);
 		fprintf(fp, "fft.real.w2.%i.o ", n);
 		fprintf(fp, "fft.real.w4.%i.o ", n);
@@ -210,16 +296,16 @@ int main(int argc, char **argv) {
 		fprintf(fp, "fft.complex.dif.w4.%i.o ", n);
 	}
 	for (int n = Nmin; n <= Nmax; n++) {
-		//		fprintf(fp, "fft.real.%i.o ", n);
+		//	fprintf(fp, "fft.skew.%i.o ", n);
 	}
 	fprintf(fp, "\n%%.o: %%.S $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
 	fprintf(fp, "\n%%.o: %%.cpp $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
-	fprintf(fp, "ffttest: $(OBJ) util.o test.o load.o sfft_complex.o sfft_real.o store.o twiddle.o\n");
+	fprintf(fp, "ffttest: $(OBJ) util.o test.o load.o sfft_skew.o sfft_complex.o sfft_real.o store.o twiddle.o\n");
 	fprintf(fp, "\t$(CC) -o $@ $^ $(CFLAGS) -lfftw3\n");
-	fprintf(fp, "libsfft.a: shuffle.o sfft_real.o sfft_complex.o $(OBJ)\n");
-	fprintf(fp, "\tar -rcs libsfft.a shuffle.o sfft_complex.o sfft_real.o $(OBJ)\n");
+	fprintf(fp, "libsfft.a: shuffle.o sfft_real.o sfft_complex.o sfft_skew.o $(OBJ)\n");
+	fprintf(fp, "\tar -rcs libsfft.a shuffle.o sfft_complex.o sfft_real.o sfft_skew.o $(OBJ)\n");
 	fclose(fp);
 	print_fft_bests();
 	return 0;

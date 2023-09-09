@@ -639,7 +639,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			if (ready) {
 				candidates.push_back(V);
 			}
-			if (candidates.size() > 8) {
+			if( candidates.size() > 8 ) {
 				break;
 			}
 		}
