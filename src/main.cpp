@@ -73,12 +73,28 @@ int main(int argc, char **argv) {
 		int cnt1 = 0;
 		int cnt2 = 0;
 		fft_reset_cache();
+		fprintf(stderr, "------------------------------REAL/COMPLEX-------------------------\n");
+		for (int N = Nmin; N <= Nmax; N++) {
+			auto inputs = math_vertex::new_inputs(2 * N);
+			auto outputs = fft(inputs, N, 0);
+			auto cnt = math_vertex::operation_count(outputs);
+			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, true, DIT);
+			fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
+			std::string code = apply_header(tmp.first, std::string("sfft_real_complex_w") + std::to_string(width) + "_" + std::to_string(N));
+			std::string fname = "fft.real.complex.w" + std::to_string(width) + "." + std::to_string(N) + ".S";
+			FILE* fp = fopen(fname.c_str(), "wt");
+			fprintf(fp, "%s\n", code.c_str());
+			fclose(fp);
+			cnt1 += tmp.second;
+			cnt2 += cnt.total();
+		}
+
 		fprintf(stderr, "------------------------------SKEW-------------------------\n");
 		for (int N = Nmin; N <= Nmax; N++) {
 			auto inputs = math_vertex::new_inputs(N);
 			auto outputs = fft(inputs, 2 * N, FFT_SKEW);
 			auto cnt = math_vertex::operation_count(outputs);
-			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, 4, NONE);
+			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, false, NONE);
 			fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_SKEW).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 			std::string code = apply_header(tmp.first, std::string("sfft_skew_w") + std::to_string(width) + "_" + std::to_string(N));
 			std::string fname = "fft.skew.w" + std::to_string(width) + "." + std::to_string(N) + ".S";
@@ -94,7 +110,7 @@ int main(int argc, char **argv) {
 			auto inputs = math_vertex::new_inputs(N);
 			auto outputs = fft(inputs, N, FFT_REAL);
 			auto cnt = math_vertex::operation_count(outputs);
-			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, 4, NONE);
+			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, false, NONE);
 			fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 			std::string code = apply_header(tmp.first, std::string("sfft_real_w") + std::to_string(width) + "_" + std::to_string(N));
 			std::string fname = "fft.real.w" + std::to_string(width) + "." + std::to_string(N) + ".S";
@@ -110,7 +126,7 @@ int main(int argc, char **argv) {
 			auto inputs = math_vertex::new_inputs(2 * N);
 			auto outputs = fft(inputs, N, 0);
 			auto cnt = math_vertex::operation_count(outputs);
-			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4, NONE);
+			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, false, NONE);
 			fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 			std::string code = apply_header(tmp.first, std::string("sfft_complex_w") + std::to_string(width) + "_" + std::to_string(N));
 			std::string fname = "fft.complex.w" + std::to_string(width) + "." + std::to_string(N) + ".S";
@@ -126,7 +142,7 @@ int main(int argc, char **argv) {
 			auto inputs = math_vertex::new_inputs(2 * N);
 			auto outputs = fft(inputs, N, 0);
 			auto cnt = math_vertex::operation_count(outputs);
-			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4, DIT);
+			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, false, DIT);
 			fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 			std::string code = apply_header(tmp.first, std::string("sfft_complex_dit_w") + std::to_string(width) + "_" + std::to_string(N));
 			std::string fname = "fft.complex.dit.w" + std::to_string(width) + "." + std::to_string(N) + ".S";
@@ -142,7 +158,7 @@ int main(int argc, char **argv) {
 			auto inputs = math_vertex::new_inputs(2 * N);
 			auto outputs = fft(inputs, N, 0);
 			auto cnt = math_vertex::operation_count(outputs);
-			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, 4, DIF);
+			auto tmp = math_vertex::execute_all(std::move(inputs), outputs, true, false, DIF);
 			fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, 0).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 			std::string code = apply_header(tmp.first, std::string("sfft_complex_dif_w") + std::to_string(width) + "_" + std::to_string(N));
 			std::string fname = "fft.complex.dif.w" + std::to_string(width) + "." + std::to_string(N) + ".S";
@@ -159,7 +175,7 @@ int main(int argc, char **argv) {
 		 auto inputs = math_vertex::new_inputs(N);
 		 auto outputs = fft(inputs, N, FFT_REAL);
 		 auto cnt = math_vertex::operation_count(outputs);
-		 auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, 4, NONE);
+		 auto tmp = math_vertex::execute_all(std::move(inputs), outputs, false, false, NONE);
 		 fprintf(stderr, "N = %4i | %16s | tot = %4i | add = %4i | mul = %4i | neg = %4i | decls = %i\n", N, get_best_method(N, FFT_REAL).c_str(), cnt.add + cnt.mul + cnt.neg, cnt.add, cnt.mul, cnt.neg, tmp.second);
 		 std::string code = apply_header(tmp.first, std::string("sfft_real_w") + std::to_string(width) + "_" + std::to_string(N));
 		 std::string fname = "fft.real.w" + std::to_string(width) + "." std::to_string(N) + ".S";
@@ -186,6 +202,7 @@ int main(int argc, char **argv) {
 		fprintf(fp, "void sfft_real_w%i(double* x, int s, int N);\n", width);
 		fprintf(fp, "void sfft_skew_w%i(double* x, int s, int N);\n", width);
 		fprintf(fp, "void sfft_complex_w%i(double* x, double* y, int s, int N);\n", width);
+		fprintf(fp, "void sfft_real_complex_w%i(double* x, double* y, int s, int N, double* w);\n", width);
 		fprintf(fp, "void sfft_complex_dit_w%i(double* x, double* y, int s, int N, double* w);\n", width);
 		fprintf(fp, "void sfft_complex_dif_w%i(double* x, double* y, int s, int N, double* w);\n", width);
 	}
@@ -199,6 +216,7 @@ int main(int argc, char **argv) {
 	system("cp ../../gen_src/store.S .\n");
 	system("cp ../../gen_src/sfft_complex.S .\n");
 	system("cp ../../gen_src/sfft_real.S .\n");
+	system("cp ../../gen_src/sfft_real_complex.S .\n");
 	system("cp ../../gen_src/sfft_skew.S .\n");
 	system("cp ../../gen_src/twiddle.S .\n");
 	system("cp ../../gen_src/shuffle.S .\n");
@@ -288,6 +306,9 @@ int main(int argc, char **argv) {
 		fprintf(fp, "fft.complex.w1.%i.o ", n);
 		fprintf(fp, "fft.complex.w2.%i.o ", n);
 		fprintf(fp, "fft.complex.w4.%i.o ", n);
+		fprintf(fp, "fft.real.complex.w1.%i.o ", n);
+		fprintf(fp, "fft.real.complex.w2.%i.o ", n);
+		fprintf(fp, "fft.real.complex.w4.%i.o ", n);
 		fprintf(fp, "fft.complex.dit.w1.%i.o ", n);
 		fprintf(fp, "fft.complex.dit.w2.%i.o ", n);
 		fprintf(fp, "fft.complex.dit.w4.%i.o ", n);

@@ -158,7 +158,7 @@ public:
 	static op_cnt_t operation_count(std::vector<math_vertex>);
 	static op_cnt_t operation_count(std::vector<cmplx>);
 	static std::vector<math_vertex> new_inputs(int cnt);
-	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices, bool cmpx, int simdsz, decimation_t dtype);
+	static std::pair<std::string, int> execute_all(std::vector<math_vertex>&&, std::vector<math_vertex>& vertices, bool cmpx, bool realcmplx, decimation_t dtype);
 	static void optimize(std::vector<math_vertex>& vertices);
 	friend math_vertex operator+(const math_vertex& A, const math_vertex& B);
 	friend math_vertex operator-(const math_vertex& A, const math_vertex& B);

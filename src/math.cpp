@@ -458,21 +458,12 @@ std::vector<std::string> get_mem_locs(std::string& pro, std::string& code, std::
 	return locs;
 }
 
-std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, int simdsz, decimation_t deci) {
+std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& inputs, std::vector<math_vertex>& outputs, bool cmplx, bool realcmplx, decimation_t deci) {
 	std::string code, pro, epi;
 	int ncnt = 5;
 	std::pair<std::string, int> rc;
 	auto db = outputs[0].v.properties().names;
 	auto memlocs = get_mem_locs(pro, code, epi, cmplx ? (outputs.size() / 2) : outputs.size());
-	if (deci == NONE) {
-//		char* ptr;
-//		asprintf(&ptr, "%15s%-15s%s, %s\n", "", "mov", "%rdx", "%rcx");
-//		pro = std::string(ptr) + pro;
-//		free(ptr);
-	}
-	for (int i = 0; i < memlocs.size(); i++) {
-		//	printf("%s\n", memlocs[i].c_str());
-	}
 	for (int n = 0; n < outputs.size(); n++) {
 		outputs[n] = outputs[n].optimize_fma();
 	}
@@ -488,7 +479,6 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			props.num = n;
 			props.isreal = true;
 		}
-		//	props.name = db->reserve_name(memlocs[n] + "out");
 
 	}
 	if (!cmplx) {
@@ -587,7 +577,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 
 	int index = 0;
 	std::string constants;
-	if (hasneg) {
+	if (hasneg || realcmplx) {
 		std::string nm = std::string("CZ");
 		char* ptr;
 		asprintf(&ptr, "%-15s%-15s%-25.17e\n", (nm + ":").c_str(), ".double", -0.0);
@@ -639,7 +629,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			if (ready) {
 				candidates.push_back(V);
 			}
-			if( candidates.size() > 8 ) {
+			if (candidates.size() > 8) {
 				break;
 			}
 		}
@@ -704,6 +694,24 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			free(ptr);
 		}
 	}
+	if (realcmplx) {
+		for (int n = 1; n < outputs.size() / 2; n += 2) {
+			auto nm = *outputs[n].v.properties().name;
+			auto reg = db->get_register(nm, code, false);
+			char* ptr;
+			asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", xor_op(), "CZ", reg.c_str(), reg.c_str());
+			code += ptr;
+			free(ptr);
+		}
+		auto locs = memlocs;
+		int N = outputs.size();
+		for (int n = 1; n < N / 2; n += 2) {
+			memlocs[n] = locs[N - n - 1];
+		}
+		for (int n = N / 2; n < N; n += 2) {
+			memlocs[n] = locs[N - n - 1];
+		}
+	}
 	for (int n = 0; n < outputs.size(); n++) {
 		char* ptr;
 		auto& props = outputs[n].v.properties();
@@ -723,59 +731,6 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			free(ptr);
 		}
 	}
-//	code += db->free_regs();
-
-	/*bool hit;
-	 while (1) {
-	 hit = false;
-	 int i;
-	 std::string nm1, nm2;
-	 for (i = 0; i < outputs.size(); i++) {
-	 nm1 = memlocs[i];
-	 nm2 = *outputs[i].v.properties().name;
-	 if (nm1 != nm2) {
-	 hit = true;
-	 break;
-	 }
-	 }
-	 if (!hit) {
-	 break;
-	 }
-	 char* ptr;
-	 hit = false;
-	 for (int j = 0; j < outputs.size(); j++) {
-	 if (i == j) {
-	 continue;
-	 } else if (nm1 == *outputs[j].v.properties().name) {
-	 //	printf( "SWAP %s %s\n", nm1.c_str(), nm2.c_str());
-	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm2.c_str(), simd_reg(14).c_str());
-	 code += ptr;
-	 free(ptr);
-	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm1.c_str(), simd_reg(15).c_str());
-	 code += ptr;
-	 free(ptr);
-	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(15).c_str(), nm2.c_str());
-	 code += ptr;
-	 free(ptr);
-	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), nm1.c_str());
-	 code += ptr;
-	 free(ptr);
-	 std::swap(outputs[i], outputs[j]);
-	 hit = true;
-	 break;
-	 }
-	 }
-	 if (!hit) {
-	 //asprintf(&ptr "ASN  %s\n", nm1.c_str());
-	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), nm2.c_str(), simd_reg(14).c_str());
-	 code += ptr;
-	 free(ptr);
-	 asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), simd_reg(14).c_str(), nm1.c_str());
-	 code += ptr;
-	 free(ptr);
-	 outputs[i].v.properties().name = std::make_shared<std::string>(memlocs[i]);
-	 }
-	 }*/
 
 	auto decls = db->get_declarations();
 
@@ -832,7 +787,7 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 			rc.second++;
 		}
 	}
-	//rc.first += clear_registers();
+//rc.first += clear_registers();
 	rc.first += "               .align         " + std::to_string(simd_width()) + "\n";
 	rc.first += constants;
 	rc.first = rc.first;
