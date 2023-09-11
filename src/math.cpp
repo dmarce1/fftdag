@@ -500,8 +500,9 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		}
 		props.name = db->generate_name();
 		char* ptr;
+		const int N = outputs.size();
 		auto areg = db->get_register(*props.name, code, true);
-		if (realcmplx && n % 2 == 1) {
+		if (realcmplx && ((n < N / 2 && n % 2 == 1) || (N >= N / 2 && n % 2 == 0))) {
 			if (simd_width() == 32) {
 				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vpermpd", "$27", memlocs[n].c_str(), areg.c_str());
 				code += ptr;
