@@ -501,9 +501,28 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		props.name = db->generate_name();
 		char* ptr;
 		auto areg = db->get_register(*props.name, code, true);
-		asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), memlocs[n].c_str(), areg.c_str());
-		code += ptr;
-		free(ptr);
+		if (realcmplx && n % 2 == 1) {
+			if (simd_width() == 32) {
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vpermpd", "$27", memlocs[n].c_str(), areg.c_str());
+				code += ptr;
+				free(ptr);
+			} else if (simd_width() == 16) {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), memlocs[n].c_str(), areg.c_str());
+				code += ptr;
+				free(ptr);
+				asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vpshufb", "RSHUF", areg.c_str(), areg.c_str());
+				code += ptr;
+				free(ptr);
+			} else {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", "vmovq", memlocs[n].c_str(), areg.c_str());
+				code += ptr;
+				free(ptr);
+			}
+		} else {
+			asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), memlocs[n].c_str(), areg.c_str());
+			code += ptr;
+			free(ptr);
+		}
 
 		assert(props.op == IN);
 	}
@@ -585,6 +604,22 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		free(ptr);
 		for (int l = 1; l < simd_width() / 8; l++) {
 			asprintf(&ptr, "%15s%-15s%-25.17e\n", "", ".double", -0.0);
+			constants += ptr;
+			free(ptr);
+		}
+	}
+	if (realcmplx && simd_width() == 16) {
+		char* ptr;
+		std::string nm = std::string("RSHUF");
+		asprintf(&ptr, "%-15s%-15s%-25i\n", (nm + ":").c_str(), ".byte", 8);
+		constants += ptr;
+		for (int i = 9; i < 16; i++) {
+			asprintf(&ptr, "%15s%-15s%-25i\n", "", ".byte", i);
+			constants += ptr;
+			free(ptr);
+		}
+		for (int i = 0; i < 8; i++) {
+			asprintf(&ptr, "%15s%-15s%-25i\n", "", ".byte", i);
 			constants += ptr;
 			free(ptr);
 		}
@@ -705,11 +740,17 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		}
 		auto locs = memlocs;
 		int N = outputs.size();
+		for (int n = 0; n < N / 2; n += 2) {
+			memlocs[n] = locs[n];
+		}
 		for (int n = 1; n < N / 2; n += 2) {
 			memlocs[n] = locs[N - n - 1];
 		}
-		for (int n = N / 2; n < N; n += 2) {
-			memlocs[n] = locs[N - n - 1];
+		for (int n = N / 2; n < N / 2; n += 2) {
+			memlocs[n] = locs[n + 1];
+		}
+		for (int n = N / 2 + 1; n < N; n += 2) {
+			memlocs[n] = locs[N - n];
 		}
 	}
 	for (int n = 0; n < outputs.size(); n++) {
@@ -717,15 +758,42 @@ std::pair<std::string, int> math_vertex::execute_all(std::vector<math_vertex>&& 
 		auto& props = outputs[n].v.properties();
 		auto name = db->current_name(*props.name);
 		if (name[0] == '%') {
+			if (realcmplx && n % 2 == 1) {
+				if (simd_width() == 32) {
+					asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vpermpd", "$27", name.c_str(), name.c_str());
+					code += ptr;
+					free(ptr);
+				} else if (simd_width() == 16) {
+					asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vpshufb", "RSHUF", name.c_str(), name.c_str());
+					code += ptr;
+					free(ptr);
+				}
+			}
 			asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), name.c_str(), memlocs[n].c_str());
 			code += ptr;
 			free(ptr);
 		} else {
+
 			static int regnum = 14;
 			regnum = regnum == 15 ? 14 : 15;
-			asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), name.c_str(), simd_reg(regnum).c_str());
-			code += ptr;
-			free(ptr);
+			if (realcmplx && n % 2 == 1 && simd_width() > 8) {
+				if (simd_width() == 32) {
+					asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vpermpd", "$27", name.c_str(), simd_reg(regnum).c_str());
+					code += ptr;
+					free(ptr);
+				} else if (simd_width() == 16) {
+					asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), name.c_str(), simd_reg(regnum).c_str());
+					code += ptr;
+					free(ptr);
+					asprintf(&ptr, "%15s%-15s%s, %s, %s\n", "", "vpshufb", "RSHUF", simd_reg(regnum).c_str(), simd_reg(regnum).c_str());
+					code += ptr;
+					free(ptr);
+				}
+			} else {
+				asprintf(&ptr, "%15s%-15s%s, %s\n", "", mova_op(), name.c_str(), simd_reg(regnum).c_str());
+				code += ptr;
+				free(ptr);
+			}
 			asprintf(&ptr, "%15s%-15s%s, %s\n", "", movu_op(), simd_reg(regnum).c_str(), memlocs[n].c_str());
 			code += ptr;
 			free(ptr);

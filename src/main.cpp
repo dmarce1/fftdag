@@ -323,10 +323,10 @@ int main(int argc, char **argv) {
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
 	fprintf(fp, "\n%%.o: %%.cpp $(DEPS)\n");
 	fprintf(fp, "\t$(CC) -c -o $@ $< $(CFLAGS)\n\n");
-	fprintf(fp, "ffttest: $(OBJ) util.o test.o load.o sfft_skew.o sfft_complex.o sfft_real.o store.o twiddle.o\n");
+	fprintf(fp, "ffttest: $(OBJ) util.o test.o load.o sfft_skew.o sfft_complex.o sfft_real_complex.o sfft_real.o store.o twiddle.o\n");
 	fprintf(fp, "\t$(CC) -o $@ $^ $(CFLAGS) -lfftw3\n");
-	fprintf(fp, "libsfft.a: shuffle.o sfft_real.o sfft_complex.o sfft_skew.o $(OBJ)\n");
-	fprintf(fp, "\tar -rcs libsfft.a shuffle.o sfft_complex.o sfft_real.o sfft_skew.o $(OBJ)\n");
+	fprintf(fp, "libsfft.a: shuffle.o sfft_real.o sfft_complex.o sfft_skew.o sfft_real_complex.o $(OBJ)\n");
+	fprintf(fp, "\tar -rcs libsfft.a shuffle.o sfft_complex.o sfft_real.o sfft_real_complex.o sfft_skew.o $(OBJ)\n");
 	fclose(fp);
 	print_fft_bests();
 	return 0;
